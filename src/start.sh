@@ -113,7 +113,7 @@ fi
 
 # --- Transformer FP8 pre-quantise avec Lightning fuse (~20GB) ---
 download_model \
-    "https://huggingface.co/lightx2v/Qwen-Image-Edit-2511-Lightning/resolve/main/qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning.safetensors" \
+    "https://huggingface.co/lightx2v/Qwen-Image-Edit-2511-Lightning/resolve/main/qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_4steps_v1.0.safetensors" \
     "${MODELS_DIR}" 10000000000 &
 DOWNLOAD_PIDS+=($!)
 

@@ -41,7 +41,12 @@ QWEN_EXPECTED_ROOT_FILES = {
     "README.md",
 }
 
-FP8_FILENAME = "qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning.safetensors"
+FP8_FILENAME = "qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_4steps_v1.0.safetensors"
+
+# Anciens fichiers FP8 (renommes upstream)
+OBSOLETE_FP8_FILENAMES = {
+    "qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning.safetensors",
+}
 
 # Dossiers fonctionnels sur le volume
 FUNCTIONAL_DIRS = {"models", "output", "cache"}
@@ -182,10 +187,23 @@ def audit_models_dir(models_dir: Path, report: AuditReport) -> None:
             reason="Dossier LoRA — remplace par FP8 pre-quantise avec Lightning fuse",
         ))
 
+    # --- Anciens fichiers FP8 (renommes upstream) ---
+    for old_name in OBSOLETE_FP8_FILENAMES:
+        old_file = models_dir / old_name
+        if old_file.exists():
+            size = old_file.stat().st_size
+            report.add(AuditEntry(
+                path=str(old_file),
+                size_bytes=size,
+                category="obsolete",
+                reason=f"Ancien fichier FP8 renomme — remplace par {FP8_FILENAME}",
+            ))
+
     # --- Tout autre fichier/dossier dans models/ ---
+    known_names = {"Qwen-Image-Edit-2511", FP8_FILENAME, "loras"} | OBSOLETE_FP8_FILENAMES
     for item in models_dir.iterdir():
         name = item.name
-        if name in ("Qwen-Image-Edit-2511", FP8_FILENAME, "loras"):
+        if name in known_names:
             continue  # deja traite
         size = item.stat().st_size if item.is_file() else dir_size(item)
         report.add(AuditEntry(

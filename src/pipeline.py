@@ -80,7 +80,7 @@ class MedusaI2IPipeline:
         self._model_path = os.path.join(models_dir, "Qwen-Image-Edit-2511")
         self._fp8_path = os.path.join(
             models_dir,
-            "qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning.safetensors",
+            "qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_4steps_v1.0.safetensors",
         )
         self._pipe: QwenImageEditPlusPipeline | None = None
 

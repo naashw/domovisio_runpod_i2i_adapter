@@ -10,7 +10,7 @@ Use case : edition d'images immobilier/renovation — before/after, changement d
 
 - **Runtime** : Diffusers (Python direct) sur RunPod Serverless (RTX 4090, 24GB VRAM)
 - **Modele principal** : Qwen-Image-Edit-2511 (transformer FP8 pre-quantise avec Lightning fuse, ~10GB VRAM)
-- **Fichier FP8** : `qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning.safetensors` (~20GB) de `lightx2v/Qwen-Image-Edit-2511-Lightning`
+- **Fichier FP8** : `qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_4steps_v1.0.safetensors` (~20GB) de `lightx2v/Qwen-Image-Edit-2511-Lightning`
 - **torch.compile** : Opt-in via `TORCH_COMPILE=true` (~2.4x speedup, premiere inference plus lente)
 - **Approche** : Pipeline 1 passe, true_cfg_scale=1.0 (CFG desactive, modele distille), 4 steps
 - **CPU offload** : `enable_model_cpu_offload()` — text encoder (14GB) et transformer (10GB) jamais en VRAM en meme temps
