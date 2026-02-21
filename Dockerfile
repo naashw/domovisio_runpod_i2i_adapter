@@ -35,33 +35,28 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ENV PATH="/opt/venv/bin:$PATH"
 
 # --- PyTorch 2.10.0 (CUDA 12.8) ---
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install torch==2.10.0 torchvision torchaudio \
+RUN pip install --no-cache-dir torch==2.10.0 torchvision torchaudio \
         --index-url https://download.pytorch.org/whl/cu128
 
 # --- Core Python tooling ---
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install packaging setuptools wheel
+RUN pip install --no-cache-dir packaging setuptools wheel
 
 # --- Runtime deps (requirements.txt) ---
 COPY requirements.txt /tmp/requirements.txt
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -r /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 # --- Diffusers from git (branche main, requis pour Qwen-Image-Edit-2511) ---
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install git+https://github.com/huggingface/diffusers
+RUN pip install --no-cache-dir git+https://github.com/huggingface/diffusers
 
 # --- SageAttention 2.2.0 (compile depuis source, requis CUDA 12.8+) ---
 # TORCH_CUDA_ARCH_LIST requis car pas de GPU au build time (RTX 4090 = 8.9)
-RUN --mount=type=cache,target=/root/.cache/pip \
-    TORCH_CUDA_ARCH_LIST="8.9" \
-    pip install git+https://github.com/thu-ml/SageAttention.git@v2.2.0 --no-build-isolation
+RUN TORCH_CUDA_ARCH_LIST="8.9" \
+    pip install --no-cache-dir git+https://github.com/thu-ml/SageAttention.git@v2.2.0 --no-build-isolation
 
 # --- LightX2V from source (extensions CUDA) ---
 RUN git clone https://github.com/ModelTC/LightX2V /opt/lightx2v && \
     cd /opt/lightx2v && \
-    pip install -v .
+    pip install --no-cache-dir -v .
 
 # ============================================================
 # Stage 2 : runtime (pas de compilateur, pas de headers)

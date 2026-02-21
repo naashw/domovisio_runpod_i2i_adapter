@@ -17,7 +17,7 @@ Use case : edition d'images immobilier/renovation — before/after, changement d
 - **CPU offload** : `enable_offload(cpu_offload=True, offload_granularity="block")` — text encoder et transformer jamais en VRAM en meme temps
 - **VRAM peak** : ~14GB
 - **Output** : PNG/JPEG, resolution max 1024px, default 768px
-- **PyTorch** : ~2.7 (CUDA 12.8)
+- **PyTorch** : 2.10.0 (CUDA 12.8)
 
 ## Structure
 
