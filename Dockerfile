@@ -1,15 +1,15 @@
-# Medusa I2I - Qwen-Image-Edit-2511
+# Medusa I2I - Qwen-Image-Edit-2511 (LightX2V)
 # Image legere : les modeles sont telecharges au runtime sur le network volume
 # Supporte 2 modes : GPU Pod (interactif) et RunPod Serverless (API)
 #
-# Multi-stage build : devel (compile) -> runtime (execute)
+# Multi-stage build : devel (compile LightX2V + SageAttention) -> runtime (execute)
 # Build:  DOCKER_BUILDKIT=1 docker build --platform linux/amd64 -t medusa-i2i .
 #
 # GPU Pod:     docker run --gpus all -p 8888:8888 -v /workspace:/workspace medusa-i2i
 # Serverless:  docker run --gpus all -e SERVERLESS=true -v /workspace:/workspace medusa-i2i
 
 # ============================================================
-# Stage 1 : builder (compile PyTorch, Diffusers)
+# Stage 1 : builder (compile LightX2V, SageAttention, PyTorch)
 # ============================================================
 FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu24.04 AS builder
 
@@ -43,10 +43,19 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install packaging setuptools wheel
 
-# --- Diffusers + runtime deps ---
+# --- Runtime deps (requirements.txt) ---
 COPY requirements.txt /tmp/requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -r /tmp/requirements.txt
+
+# --- Diffusers from git (branche main, requis pour Qwen-Image-Edit-2511) ---
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install git+https://github.com/huggingface/diffusers
+
+# --- LightX2V from source (extensions CUDA) ---
+RUN git clone https://github.com/ModelTC/LightX2V /opt/lightx2v && \
+    cd /opt/lightx2v && \
+    pip install -v .
 
 # ============================================================
 # Stage 2 : runtime (pas de compilateur, pas de headers)
@@ -74,6 +83,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 # --- Copy venv depuis builder ---
 COPY --from=builder /opt/venv /opt/venv
+
+# --- Copy LightX2V configs (requis par le pipeline) ---
+COPY --from=builder /opt/lightx2v/configs /opt/lightx2v/configs
 
 # --- Application ---
 RUN mkdir -p /app

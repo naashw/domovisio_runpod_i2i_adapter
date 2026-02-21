@@ -41,7 +41,10 @@ QWEN_EXPECTED_ROOT_FILES = {
     "README.md",
 }
 
-FP8_FILENAME = "qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_4steps_v1.0.safetensors"
+FP8_FILENAMES = {
+    "qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_4steps_v1.0.safetensors",
+    "qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_8steps_v1.0.safetensors",
+}
 
 # Anciens fichiers FP8 (renommes upstream)
 OBSOLETE_FP8_FILENAMES = {
@@ -140,14 +143,15 @@ def audit_models_dir(models_dir: Path, report: AuditReport) -> None:
         return
 
     qwen_dir = models_dir / "Qwen-Image-Edit-2511"
-    fp8_file = models_dir / FP8_FILENAME
 
-    # --- FP8 transformer ---
-    if fp8_file.exists():
-        report.used_by_pipeline += fp8_file.stat().st_size
-        log.info("OK: %s (%s)", FP8_FILENAME, format_size(fp8_file.stat().st_size))
-    else:
-        log.warning("MANQUANT: %s", FP8_FILENAME)
+    # --- FP8 transformers (4-step + 8-step) ---
+    for fp8_name in sorted(FP8_FILENAMES):
+        fp8_file = models_dir / fp8_name
+        if fp8_file.exists():
+            report.used_by_pipeline += fp8_file.stat().st_size
+            log.info("OK: %s (%s)", fp8_name, format_size(fp8_file.stat().st_size))
+        else:
+            log.warning("MANQUANT: %s", fp8_name)
 
     # --- Repo Qwen ---
     if qwen_dir.exists():
@@ -196,11 +200,11 @@ def audit_models_dir(models_dir: Path, report: AuditReport) -> None:
                 path=str(old_file),
                 size_bytes=size,
                 category="obsolete",
-                reason=f"Ancien fichier FP8 renomme — remplace par {FP8_FILENAME}",
+                reason="Ancien fichier FP8 renomme — remplace par les checkpoints 4-step/8-step",
             ))
 
     # --- Tout autre fichier/dossier dans models/ ---
-    known_names = {"Qwen-Image-Edit-2511", FP8_FILENAME, "loras"} | OBSOLETE_FP8_FILENAMES
+    known_names = {"Qwen-Image-Edit-2511", "loras"} | FP8_FILENAMES | OBSOLETE_FP8_FILENAMES
     for item in models_dir.iterdir():
         name = item.name
         if name in known_names:

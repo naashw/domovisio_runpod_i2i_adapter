@@ -1,7 +1,7 @@
 """
-MedusaI2IPipeline — Diffusers-based image editing with Qwen-Image-Edit-2511.
+MedusaI2IPipeline — LightX2V-based image editing with Qwen-Image-Edit-2511.
 
-Pipeline FP8 pre-quantise (Lightning fuse) pour edition d'images
+Pipeline FP8 pre-quantise (Lightning fuse) + SageAttention pour edition d'images
 immobilier/renovation sur RunPod Serverless (RTX 4090, 24GB VRAM).
 """
 
@@ -9,11 +9,9 @@ from __future__ import annotations
 
 import logging
 import os
+import tempfile
 
-import torch
-from diffusers import QwenImageEditPlusPipeline, QwenImageTransformer2DModel
 from PIL import Image
-from safetensors.torch import load_file
 
 log = logging.getLogger("medusa")
 
@@ -68,77 +66,82 @@ DEFAULT_NEGATIVE_PROMPT = (
     "compressed artifacts, jpeg artifacts, noise, grainy"
 )
 
-LIGHTNING_STEPS = 4
-LIGHTNING_TRUE_CFG_SCALE = 1.0
+VALID_NUM_STEPS = (4, 8)
 
 
 class MedusaI2IPipeline:
-    """Pipeline I2I utilisant Diffusers avec Qwen-Image-Edit-2511 FP8 pre-quantise."""
+    """Pipeline I2I utilisant LightX2V avec Qwen-Image-Edit-2511 FP8 pre-quantise."""
 
     def __init__(self, models_dir: str) -> None:
         self.models_dir = models_dir
         self._model_path = os.path.join(models_dir, "Qwen-Image-Edit-2511")
-        self._fp8_path = os.path.join(
-            models_dir,
-            "qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_4steps_v1.0.safetensors",
-        )
-        self._pipe: QwenImageEditPlusPipeline | None = None
+        self._fp8_paths: dict[int, str] = {
+            4: os.path.join(
+                models_dir,
+                "qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_4steps_v1.0.safetensors",
+            ),
+            8: os.path.join(
+                models_dir,
+                "qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_8steps_v1.0.safetensors",
+            ),
+        }
+        self._pipe = None
+        self._loaded_steps: int | None = None
 
-    @staticmethod
-    def _log_vram(label: str) -> None:
-        """Log l'utilisation VRAM courante (alloue + reserve)."""
-        if torch.cuda.is_available():
-            alloc = torch.cuda.memory_allocated() / 2**30
-            rsvd = torch.cuda.memory_reserved() / 2**30
-            log.info("VRAM [%s]: %.2fGB alloc, %.2fGB reserved", label, alloc, rsvd)
+    def load(self, num_steps: int = 4) -> None:
+        """Charge le pipeline LightX2V avec le checkpoint FP8 pour num_steps.
 
-    def load(self) -> None:
-        """Charge le pipeline avec transformer FP8 pre-quantise (Lightning fuse).
-
-        1. Transformer FP8 via from_config + load_state_dict (pas d'alloc BF16)
-        2. Pipeline complet (text encoder BF16 sur CPU)
-        3. enable_model_cpu_offload — pas de .to("cuda")
+        1. LightX2VPipeline avec model_cls qwen-image-edit-2511, task i2i
+        2. FP8 quantization via enable_quantize (fp8-sgl)
+        3. CPU offload par blocs (text encoder + transformer jamais en VRAM ensemble)
+        4. SageAttention via create_generator (sage_attn2)
         """
-        log.info("Chargement transformer FP8 pre-quantise...")
-        config = QwenImageTransformer2DModel.load_config(
-            self._model_path, subfolder="transformer",
-        )
-        with torch.device("meta"):
-            transformer = QwenImageTransformer2DModel.from_config(config)
-        state_dict = load_file(self._fp8_path, device="cpu")
-        # Filtrer les weight_scale (metadata quantization, pas attendu par le modele)
-        scale_keys = [k for k in state_dict if k.endswith(".weight_scale")]
-        for k in scale_keys:
-            del state_dict[k]
-        if scale_keys:
-            log.info("Filtre %d cles weight_scale du state_dict", len(scale_keys))
-        transformer.load_state_dict(state_dict, assign=True, strict=True)
-        log.info("Transformer FP8 charge (%s)", os.path.basename(self._fp8_path))
+        from lightx2v import LightX2VPipeline
 
-        log.info("Chargement pipeline complet...")
-        self._pipe = QwenImageEditPlusPipeline.from_pretrained(
-            self._model_path,
-            transformer=transformer,
-            torch_dtype=torch.bfloat16,
+        fp8_path = self._fp8_paths[num_steps]
+        if not os.path.isfile(fp8_path):
+            raise FileNotFoundError(f"Checkpoint FP8 introuvable: {fp8_path}")
+
+        log.info("Chargement LightX2V pipeline (%d-step)...", num_steps)
+
+        pipe = LightX2VPipeline(
+            model_path=self._model_path,
+            model_cls="qwen-image-edit-2511",
+            task="i2i",
         )
 
-        # torch.compile : ~2.4x speedup (opt-in)
-        if os.environ.get("TORCH_COMPILE", "").lower() in ("1", "true"):
-            log.info("Compilation torch.compile du transformer...")
-            try:
-                self._pipe.transformer = torch.compile(
-                    self._pipe.transformer, mode="reduce-overhead",
-                )
-                log.info("torch.compile actif (premiere inference plus lente)")
-            except Exception as e:
-                log.warning("torch.compile echoue, fallback sans compilation: %s", e)
+        log.info("Activation quantization FP8: %s", os.path.basename(fp8_path))
+        pipe.enable_quantize(
+            dit_quantized=True,
+            dit_quantized_ckpt=fp8_path,
+            quant_scheme="fp8-sgl",
+        )
 
-        # CPU offload : text encoder (14GB) et transformer (10GB) jamais en VRAM en meme temps
-        self._pipe.enable_model_cpu_offload()
+        log.info("Activation CPU offload (block granularity)...")
+        pipe.enable_offload(
+            cpu_offload=True,
+            offload_granularity="block",
+            text_encoder_offload=True,
+        )
 
-        self._log_vram("pipeline pret")
+        log.info("Configuration generateur (sage_attn2, %d steps)...", num_steps)
+        pipe.create_generator(
+            attn_mode="sage_attn2",
+            resize_mode="adaptive",
+            infer_steps=num_steps,
+            guidance_scale=1.0,
+        )
 
-    @torch.inference_mode()
+        self._pipe = pipe
+        self._loaded_steps = num_steps
+        log.info("Pipeline LightX2V pret (%d-step, FP8, SageAttention)", num_steps)
+
+    def ensure_steps(self, num_steps: int) -> None:
+        """Recharge le pipeline si le nombre de steps change."""
+        if self._loaded_steps != num_steps:
+            log.info("Swap FP8: %d-step -> %d-step", self._loaded_steps, num_steps)
+            self.load(num_steps)
+
     def generate(
         self,
         image_path: str,
@@ -147,6 +150,7 @@ class MedusaI2IPipeline:
         height: int,
         width: int,
         output_path: str,
+        num_steps: int = 4,
         negative_prompt: str = DEFAULT_NEGATIVE_PROMPT,
         output_format: str = "PNG",
     ) -> str:
@@ -158,23 +162,38 @@ class MedusaI2IPipeline:
         if self._pipe is None:
             raise RuntimeError("Pipeline non charge — appeler load() d'abord")
 
+        self.ensure_steps(num_steps)
+
+        # Resize image source au format cible (LANCZOS pour qualite photo)
         img = Image.open(image_path).convert("RGB").resize(
             (width, height), Image.Resampling.LANCZOS,
         )
-        generator = torch.Generator(device="cpu").manual_seed(seed)
+        tmp_input = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        try:
+            img.save(tmp_input.name, format="PNG")
+            tmp_input.close()
 
-        result = self._pipe(
-            image=img,
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            num_inference_steps=LIGHTNING_STEPS,
-            true_cfg_scale=LIGHTNING_TRUE_CFG_SCALE,
-            height=height,
-            width=width,
-            generator=generator,
-        )
+            # LightX2V ecrit directement le resultat au save_result_path
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        result.images[0].save(output_path, format=output_format)
+            # Forcer l'extension selon output_format pour save_result_path
+            self._pipe.generate(
+                seed=seed,
+                image_path=tmp_input.name,
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                save_result_path=output_path,
+            )
+        finally:
+            if os.path.isfile(tmp_input.name):
+                os.unlink(tmp_input.name)
+
+        # Si output_format est JPEG et LightX2V a ecrit un PNG, convertir
+        if output_format == "JPEG" and output_path.lower().endswith((".jpg", ".jpeg")):
+            result_img = Image.open(output_path)
+            if result_img.mode == "RGBA":
+                result_img = result_img.convert("RGB")
+            result_img.save(output_path, format="JPEG", quality=95)
+
         log.info("Image sauvegardee: %s", output_path)
         return output_path

@@ -21,6 +21,7 @@ def main() -> None:
     parser.add_argument("--prompt", help="Prompt libre (priorite sur preset)")
     parser.add_argument("--output", default="/tmp/medusa_i2i_test.png", help="Chemin de sortie")
     parser.add_argument("--seed", type=int, default=42, help="Seed")
+    parser.add_argument("--num-steps", type=int, default=4, choices=[4, 8], help="Nombre de steps (4 ou 8)")
     parser.add_argument("--models-dir", default="/runpod-volume/models", help="Dossier modeles")
     args = parser.parse_args()
 
@@ -30,7 +31,7 @@ def main() -> None:
     prompt = args.prompt or PRESETS[args.preset]
 
     pipeline = MedusaI2IPipeline(models_dir=args.models_dir)
-    pipeline.load()
+    pipeline.load(num_steps=args.num_steps)
 
     # Resolution (simplifie pour test local)
     from PIL import Image  # noqa: E402
@@ -53,6 +54,7 @@ def main() -> None:
         height=h,
         width=w,
         output_path=args.output,
+        num_steps=args.num_steps,
     )
     print(f"Output: {args.output}")
 

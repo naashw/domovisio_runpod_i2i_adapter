@@ -24,7 +24,7 @@ import requests
 import runpod
 from PIL import Image
 
-from pipeline import MedusaI2IPipeline, PRESETS, DEFAULT_NEGATIVE_PROMPT
+from pipeline import MedusaI2IPipeline, PRESETS, DEFAULT_NEGATIVE_PROMPT, VALID_NUM_STEPS
 
 logging.basicConfig(level=logging.INFO, format="[handler] %(message)s")
 log = logging.getLogger("handler")
@@ -217,6 +217,9 @@ def handler(job: dict) -> dict:
     final_prompt = prompt or PRESETS[preset]
     negative_prompt = job_input.get("negative_prompt", DEFAULT_NEGATIVE_PROMPT)
     seed = job_input.get("seed", random.randint(0, 2**32 - 1))
+    num_steps = job_input.get("num_steps", 4)
+    if num_steps not in VALID_NUM_STEPS:
+        return {"error": f"num_steps invalide: {num_steps}. Choix: {list(VALID_NUM_STEPS)}"}
     output_format = job_input.get("output_format", "PNG").upper()
     if output_format not in ("PNG", "JPEG"):
         output_format = "PNG"
@@ -252,6 +255,7 @@ def handler(job: dict) -> dict:
             height=height,
             width=width,
             output_path=output_path,
+            num_steps=num_steps,
             negative_prompt=negative_prompt,
             output_format=output_format,
         )
