@@ -45,7 +45,7 @@ MODELS_DIR="${WORKSPACE}/models"
 echo "[medusa] Workspace: $WORKSPACE"
 echo "[medusa] Models dir: $MODELS_DIR"
 
-mkdir -p "${MODELS_DIR}/loras"
+mkdir -p "${MODELS_DIR}"
 
 # Exporter pour handler.py
 export MODELS_DIR="$MODELS_DIR"
@@ -98,7 +98,7 @@ download_model() {
 echo "[medusa] Demarrage des telechargements..."
 DOWNLOAD_PIDS=()
 
-# --- Qwen-Image-Edit-2511 (HuggingFace multi-fichiers, ~57GB BF16) ---
+# --- Qwen-Image-Edit-2511 (sans poids transformer BF16, ~37GB) ---
 QWEN_DIR="${MODELS_DIR}/Qwen-Image-Edit-2511"
 if [ -d "$QWEN_DIR" ] && [ -f "$QWEN_DIR/model_index.json" ]; then
     echo "[medusa] Deja present: Qwen-Image-Edit-2511/"
@@ -106,15 +106,15 @@ else
     python -c "
 from huggingface_hub import snapshot_download
 snapshot_download('Qwen/Qwen-Image-Edit-2511', local_dir='$QWEN_DIR',
-    ignore_patterns=['*.gguf', '*.bin', 'flax_*', 'tf_*'])
+    ignore_patterns=['*.gguf', '*.bin', 'flax_*', 'tf_*', 'transformer/*.safetensors'])
 " &
     DOWNLOAD_PIDS+=($!)
 fi
 
-# --- Lightning LoRA 4-step (~850MB) ---
+# --- Transformer FP8 pre-quantise avec Lightning fuse (~20GB) ---
 download_model \
-    "https://huggingface.co/lightx2v/Qwen-Image-Edit-2511-Lightning/resolve/main/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors" \
-    "${MODELS_DIR}/loras" 100000000 &
+    "https://huggingface.co/lightx2v/Qwen-Image-Edit-2511-Lightning/resolve/main/qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning.safetensors" \
+    "${MODELS_DIR}" 10000000000 &
 DOWNLOAD_PIDS+=($!)
 
 # Attendre tous les telechargements et verifier les codes retour

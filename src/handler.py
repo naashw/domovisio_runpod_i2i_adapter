@@ -32,6 +32,7 @@ log = logging.getLogger("handler")
 # --- Constantes ---
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+MAX_IMAGE_SIZE_MB = 20
 OUTPUT_VOLUME_DIR = os.environ.get("OUTPUT_VOLUME_DIR", "/runpod-volume/output")
 CACHE_DIR = os.environ.get("CACHE_DIR", "/runpod-volume/cache")
 VOLUME_ROOT = os.environ.get("VOLUME_ROOT", "/runpod-volume")
@@ -54,9 +55,21 @@ def resolve_image(image_data: str) -> str:
     """URL ou base64 → chemin fichier temporaire."""
     if image_data.startswith(("http://", "https://")):
         log.info("Telechargement image: %s", image_data[:80])
+        head = requests.head(image_data, timeout=10, allow_redirects=True)
+        content_length = int(head.headers.get("Content-Length", 0))
+        if content_length > MAX_IMAGE_SIZE_MB * 1024 * 1024:
+            raise ValueError(
+                f"Image trop volumineuse: {content_length / (1024*1024):.0f}MB "
+                f"(max {MAX_IMAGE_SIZE_MB}MB)"
+            )
         resp = requests.get(image_data, timeout=30)
         resp.raise_for_status()
         data = resp.content
+        if len(data) > MAX_IMAGE_SIZE_MB * 1024 * 1024:
+            raise ValueError(
+                f"Image telechargee trop volumineuse: {len(data) / (1024*1024):.0f}MB "
+                f"(max {MAX_IMAGE_SIZE_MB}MB)"
+            )
         log.info("Image telechargee: %.0f KB", len(data) / 1024)
     else:
         data = base64.b64decode(image_data)
