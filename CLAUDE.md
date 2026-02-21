@@ -13,17 +13,17 @@ Use case : edition d'images immobilier/renovation — before/after, changement d
 - **Modele principal** : Qwen-Image-Edit-2511 (transformer FP8 pre-quantise avec Lightning fuse)
 - **Fichiers FP8** : `qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_{4,8}steps_v1.0.safetensors` (~20GB chaque) de `lightx2v/Qwen-Image-Edit-2511-Lightning`
 - **LightX2V** : Gere nativement FP8, CPU offload, torch SDPA
-- **FP8 backend** : `fp8-vllm` (CUTLASS FP8 matmul via vllm) — necessite `vllm` pip package
-- **Attention** : torch SDPA (scaled dot-product attention) — SageAttention desactive car NaN avec FP8
+- **FP8 backend** : `fp8-triton` (Triton kernel, inclus avec torch, zero dep supplementaire)
+- **Attention** : torch SDPA (scaled dot-product attention)
 - **Approche** : Pipeline 1 passe, guidance_scale=1.0 (CFG desactive, modele distille), 4 ou 8 steps configurable
 - **CPU offload** : `enable_offload(cpu_offload=True, offload_granularity="block")` — text encoder et transformer jamais en VRAM en meme temps
 - **VRAM peak** : ~14GB
 - **Output** : PNG/JPEG, resolution max 1024px, default 768px
-- **PyTorch** : 2.7.0 (CUDA 12.8)
+- **PyTorch** : 2.7.x (CUDA 12.8) — LightX2V recommande 2.6 mais 2.7 fonctionne (installe avec `--no-deps`)
 
 ## Structure
 
-- `Dockerfile` — image Docker multi-stage (devel -> runtime), compile LightX2V + SageAttention
+- `Dockerfile` — image Docker multi-stage (devel -> runtime), compile LightX2V
 - `docker-compose.yml` — lancement local GPU
 - `src/start.sh` — telecharge modeles (2 checkpoints FP8) + lance handler
 - `src/pipeline.py` — classe MedusaI2IPipeline (LightX2V, FP8, torch SDPA)
@@ -107,8 +107,9 @@ Avec prompt libre :
 - `transformers>=4.46` requis
 - Resize images source avec LANCZOS (meilleure qualite downscale pour photos immobilieres)
 - Limite upload images : 20MB max (check Content-Length HEAD + taille reelle)
-- torch SDPA active via `attn_mode="torch"` dans `create_generator()` — SageAttention produit des NaN avec FP8 (Issue #221)
+- torch SDPA active via `attn_mode="torch"` dans `create_generator()` — SageAttention non installe (NaN avec FP8, Issue #221)
 - `create_generator()` sans `resize_mode` — evite l'override par la lookup table adaptive de Qwen
 - Les configs LightX2V sont copiees depuis `/opt/lightx2v/configs/` dans le Dockerfile
-- `fp8-vllm` necessite le package `vllm` (~3GB) — utilise `vllm._custom_ops.scaled_fp8_quant()` + `torch.ops._C.cutlass_scaled_mm()`
+- `fp8-triton` utilise le kernel Triton inclus avec torch — zero dep supplementaire (vllm/SageAttention supprimes)
 - Un `quant_scheme` invalide tombe silencieusement sur le backend Default (BF16) sans erreur — toujours verifier dans les logs que le bon backend est charge
+- LightX2V recommande officiellement PyTorch 2.6 + CUDA 12.8 (image Docker `lightx2v/lightx2v:26011201-cu128`) — on utilise 2.7.x par choix, installe avec `--no-deps` pour eviter le downgrade
