@@ -60,7 +60,7 @@ RUN git clone https://github.com/ModelTC/LightX2V /opt/lightx2v && \
 
 # --- Deps LightX2V manquantes (torch/diffusers/transformers deja installes) ---
 RUN pip install --no-cache-dir \
-    einops loguru scipy gguf \
+    einops loguru scipy gguf qtorch \
     imageio imageio-ffmpeg opencv-python \
     decord av pydantic
 
