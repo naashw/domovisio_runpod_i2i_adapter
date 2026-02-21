@@ -34,9 +34,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 ENV PATH="/opt/venv/bin:$PATH"
 
-# --- PyTorch 2.7.1 (CUDA 12.8) ---
+# --- PyTorch 2.10.0 (CUDA 12.8) ---
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install torch==2.7.1 torchvision torchaudio \
+    pip install torch==2.10.0 torchvision torchaudio \
         --index-url https://download.pytorch.org/whl/cu128
 
 # --- Core Python tooling ---
@@ -51,6 +51,10 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # --- Diffusers from git (branche main, requis pour Qwen-Image-Edit-2511) ---
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install git+https://github.com/huggingface/diffusers
+
+# --- SageAttention 2.2.0 (compile contre PyTorch installe) ---
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install sageattention==2.2.0 --no-build-isolation
 
 # --- LightX2V from source (extensions CUDA) ---
 RUN git clone https://github.com/ModelTC/LightX2V /opt/lightx2v && \
