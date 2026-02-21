@@ -14,6 +14,7 @@ import argparse
 import json
 import logging
 import os
+import shutil
 import sys
 import time
 from dataclasses import dataclass, field
@@ -121,6 +122,9 @@ class AuditReport:
     entries: list[AuditEntry] = field(default_factory=list)
     total_volume_size: int = 0
     used_by_pipeline: int = 0
+    disk_total: int = 0
+    disk_used: int = 0
+    disk_free: int = 0
 
     @property
     def total_reclaimable(self) -> int:
@@ -291,6 +295,11 @@ def run_audit(volume_path: str, max_age_days: float) -> AuditReport:
         log.error("Volume introuvable: %s", volume_path)
         return report
 
+    usage = shutil.disk_usage(volume)
+    report.disk_total = usage.total
+    report.disk_used = usage.used
+    report.disk_free = usage.free
+
     report.total_volume_size = dir_size(volume)
 
     log.info("Scan du volume: %s (%s)", volume_path, format_size(report.total_volume_size))
@@ -310,6 +319,12 @@ def print_report(report: AuditReport, as_json: bool = False) -> None:
     if as_json:
         data = {
             "volume_path": report.volume_path,
+            "disk_total": report.disk_total,
+            "disk_total_human": format_size(report.disk_total),
+            "disk_used": report.disk_used,
+            "disk_used_human": format_size(report.disk_used),
+            "disk_free": report.disk_free,
+            "disk_free_human": format_size(report.disk_free),
             "total_volume_size": report.total_volume_size,
             "total_volume_size_human": format_size(report.total_volume_size),
             "used_by_pipeline": report.used_by_pipeline,
@@ -331,7 +346,9 @@ def print_report(report: AuditReport, as_json: bool = False) -> None:
     print("  AUDIT VOLUME MEDUSA I2I")
     print("=" * 60)
     print(f"  Volume          : {report.volume_path}")
-    print(f"  Taille totale   : {format_size(report.total_volume_size)}")
+    print(f"  Disque total    : {format_size(report.disk_total)}")
+    print(f"  Disque utilise  : {format_size(report.disk_used)}")
+    print(f"  Disque libre    : {format_size(report.disk_free)}")
     print(f"  Utilise pipeline: {format_size(report.used_by_pipeline)}")
     print(f"  Recuperable     : {format_size(report.total_reclaimable)}")
     print("=" * 60)
