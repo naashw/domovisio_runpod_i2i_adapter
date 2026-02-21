@@ -52,9 +52,9 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install git+https://github.com/huggingface/diffusers
 
-# --- SageAttention 2.2.0 (compile contre PyTorch installe) ---
+# --- SageAttention 2.2.0 (compile depuis source, requis CUDA 12.8+) ---
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install sageattention==2.2.0 --no-build-isolation
+    pip install git+https://github.com/thu-ml/SageAttention.git@v2.2.0 --no-build-isolation
 
 # --- LightX2V from source (extensions CUDA) ---
 RUN git clone https://github.com/ModelTC/LightX2V /opt/lightx2v && \
