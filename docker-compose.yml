@@ -1,0 +1,25 @@
+services:
+  medusa-i2i:
+    container_name: medusa-i2i
+    build: .
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+        limits:
+          memory: 64G
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./data:/workspace
+    environment:
+      - WORKSPACE=/workspace
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
