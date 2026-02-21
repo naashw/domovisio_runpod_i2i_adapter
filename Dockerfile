@@ -63,12 +63,10 @@ RUN pip install --no-cache-dir \
     einops loguru scipy gguf qtorch prometheus_client \
     imageio imageio-ffmpeg opencv-python \
     decord av pydantic \
-    numpy tqdm tokenizers ftfy aiofiles psutil \
-    sgl-kernel
+    numpy tqdm tokenizers ftfy aiofiles psutil
 
 # --- Verification ABI ---
-RUN python -c "import torch; print(f'PyTorch {torch.__version__}'); assert torch.__version__.startswith('2.7'), f'ERREUR: torch={torch.__version__}, attendu 2.7.x'; import sageattention; print('SageAttention OK')" && \
-    python -c "import importlib.util; assert importlib.util.find_spec('sgl_kernel'), 'sgl-kernel non installe'; print('sgl-kernel installe (check GPU au runtime)')"
+RUN python -c "import torch; print(f'PyTorch {torch.__version__}'); assert torch.__version__.startswith('2.7'), f'ERREUR: torch={torch.__version__}, attendu 2.7.x'; import sageattention; print('SageAttention OK')"
 
 # ============================================================
 # Stage 2 : runtime (pas de compilateur, pas de headers)
