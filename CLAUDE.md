@@ -1,4 +1,5 @@
 # CLAUDE.md - Medusa I2I (Qwen-Image-Edit-2511)
+<!-- mirroring test -->
 
 ## Projet
 
