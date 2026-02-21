@@ -13,7 +13,7 @@ Use case : edition d'images immobilier/renovation — before/after, changement d
 - **Modele principal** : Qwen-Image-Edit-2511 (transformer FP8 pre-quantise avec Lightning fuse)
 - **Fichiers FP8** : `qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_{4,8}steps_v1.0.safetensors` (~20GB chaque) de `lightx2v/Qwen-Image-Edit-2511-Lightning`
 - **LightX2V** : Gere nativement FP8, CPU offload, torch SDPA
-- **FP8 backend** : `fp8-triton` (Triton FP8 matmul kernels)
+- **FP8 backend** : `fp8-vllm` (CUTLASS FP8 matmul via vllm)
 - **Attention** : torch SDPA (scaled dot-product attention) — SageAttention desactive car NaN avec FP8
 - **Approche** : Pipeline 1 passe, guidance_scale=1.0 (CFG desactive, modele distille), 4 ou 8 steps configurable
 - **CPU offload** : `enable_offload(cpu_offload=True, offload_granularity="block")` — text encoder et transformer jamais en VRAM en meme temps
