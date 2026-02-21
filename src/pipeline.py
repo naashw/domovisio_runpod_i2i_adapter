@@ -124,9 +124,17 @@ class MedusaI2IPipeline:
             text_encoder_offload=True,
         )
 
-        log.info("Configuration generateur (sage_attn2, %d steps)...", num_steps)
+        # Tenter sage_attn2, fallback sur torch (SDPA) si indisponible
+        attn_mode = "sage_attn2"
+        try:
+            import sageattention  # noqa: F401
+        except ImportError:
+            log.warning("SageAttention indisponible, fallback sur torch SDPA")
+            attn_mode = "torch"
+
+        log.info("Configuration generateur (%s, %d steps)...", attn_mode, num_steps)
         pipe.create_generator(
-            attn_mode="sage_attn2",
+            attn_mode=attn_mode,
             resize_mode="adaptive",
             infer_steps=num_steps,
             guidance_scale=1.0,

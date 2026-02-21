@@ -35,7 +35,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ENV PATH="/opt/venv/bin:$PATH"
 
 # --- PyTorch 2.10.0 (CUDA 12.8) ---
-RUN pip install --no-cache-dir torch==2.10.0 torchvision torchaudio \
+RUN pip install --no-cache-dir "torch<2.8" torchvision torchaudio \
         --index-url https://download.pytorch.org/whl/cu128
 
 # --- Core Python tooling ---
@@ -53,10 +53,19 @@ RUN pip install --no-cache-dir git+https://github.com/huggingface/diffusers
 RUN TORCH_CUDA_ARCH_LIST="8.9" \
     pip install --no-cache-dir git+https://github.com/thu-ml/SageAttention.git@v2.2.0 --no-build-isolation
 
-# --- LightX2V from source (extensions CUDA) ---
+# --- LightX2V from source (--no-deps pour eviter torch<=2.8.0 downgrade) ---
 RUN git clone https://github.com/ModelTC/LightX2V /opt/lightx2v && \
     cd /opt/lightx2v && \
-    pip install --no-cache-dir -v .
+    pip install --no-cache-dir --no-deps -v .
+
+# --- Deps LightX2V manquantes (torch/diffusers/transformers deja installes) ---
+RUN pip install --no-cache-dir \
+    einops loguru scipy \
+    imageio imageio-ffmpeg opencv-python \
+    decord av pydantic
+
+# --- Verification ABI ---
+RUN python -c "import torch; print(f'PyTorch {torch.__version__}'); assert torch.__version__.startswith('2.7'), f'ERREUR: torch={torch.__version__}, attendu 2.7.x'; import sageattention; print('SageAttention OK')"
 
 # ============================================================
 # Stage 2 : runtime (pas de compilateur, pas de headers)
