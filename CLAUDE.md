@@ -4,7 +4,7 @@
 ## Projet
 
 Pipeline Image-to-Image editing utilisant Qwen-Image-Edit-2511 avec transformer FP8 pre-quantise (Lightning fuse).
-Inference via LightX2V + SageAttention (sans ComfyUI).
+Inference via LightX2V + torch SDPA (sans ComfyUI).
 Use case : edition d'images immobilier/renovation — before/after, changement de style, virtual staging.
 
 ## Contexte Technique
@@ -12,9 +12,9 @@ Use case : edition d'images immobilier/renovation — before/after, changement d
 - **Runtime** : LightX2V (Python direct) sur RunPod Serverless (RTX 4090, 24GB VRAM)
 - **Modele principal** : Qwen-Image-Edit-2511 (transformer FP8 pre-quantise avec Lightning fuse)
 - **Fichiers FP8** : `qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_{4,8}steps_v1.0.safetensors` (~20GB chaque) de `lightx2v/Qwen-Image-Edit-2511-Lightning`
-- **LightX2V** : Gere nativement FP8, CPU offload, SageAttention
+- **LightX2V** : Gere nativement FP8, CPU offload, torch SDPA
 - **FP8 backend** : `fp8-torch` (torch._scaled_mm natif, cuBLASLt/CUTLASS) via `torchao`
-- **SageAttention** : ~1.2-1.3x speedup via `sage_attn2` (compile au build Docker)
+- **Attention** : torch SDPA (scaled dot-product attention) — SageAttention desactive car NaN avec FP8
 - **Approche** : Pipeline 1 passe, guidance_scale=1.0 (CFG desactive, modele distille), 4 ou 8 steps configurable
 - **CPU offload** : `enable_offload(cpu_offload=True, offload_granularity="block")` — text encoder et transformer jamais en VRAM en meme temps
 - **VRAM peak** : ~14GB
@@ -26,7 +26,7 @@ Use case : edition d'images immobilier/renovation — before/after, changement d
 - `Dockerfile` — image Docker multi-stage (devel -> runtime), compile LightX2V + SageAttention
 - `docker-compose.yml` — lancement local GPU
 - `src/start.sh` — telecharge modeles (2 checkpoints FP8) + lance handler
-- `src/pipeline.py` — classe MedusaI2IPipeline (LightX2V, FP8, SageAttention)
+- `src/pipeline.py` — classe MedusaI2IPipeline (LightX2V, FP8, torch SDPA)
 - `src/handler.py` — handler RunPod serverless (API simplifiee)
 - `scripts/test_local.py` — test hors RunPod
 - `scripts/audit_volume.py` — audit fichiers volume
@@ -107,5 +107,6 @@ Avec prompt libre :
 - `transformers>=4.46` requis
 - Resize images source avec LANCZOS (meilleure qualite downscale pour photos immobilieres)
 - Limite upload images : 20MB max (check Content-Length HEAD + taille reelle)
-- SageAttention active via `attn_mode="sage_attn2"` dans `create_generator()`
+- torch SDPA active via `attn_mode="torch"` dans `create_generator()` — SageAttention produit des NaN avec FP8 (Issue #221)
+- `create_generator()` appele par requete avec height/width explicites (pas de resize_mode adaptive)
 - Les configs LightX2V sont copiees depuis `/opt/lightx2v/configs/` dans le Dockerfile
