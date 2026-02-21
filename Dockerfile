@@ -82,6 +82,7 @@ RUN chmod +x /start.sh
 
 COPY src/pipeline.py /app/pipeline.py
 COPY src/handler.py /app/handler.py
+COPY scripts/audit_volume.py /app/audit_volume.py
 
 WORKDIR /app
 

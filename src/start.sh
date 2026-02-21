@@ -133,42 +133,10 @@ fi
 echo "[medusa] Tous les modeles sont prets."
 
 # -----------------------------------------------
-# 5. Detection fichiers obsoletes (ancien pipeline BF16 + LoRA)
+# 5. Audit du volume (dry run — signale sans supprimer)
 # -----------------------------------------------
-OBSOLETE_FILES=()
-
-# Ancienne LoRA Lightning (remplacee par FP8 pre-quantise)
-if [ -f "${MODELS_DIR}/loras/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors" ]; then
-    OBSOLETE_FILES+=("${MODELS_DIR}/loras/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors")
-fi
-
-# Ancien dossier loras (plus utilise)
-if [ -d "${MODELS_DIR}/loras" ]; then
-    OBSOLETE_FILES+=("${MODELS_DIR}/loras/")
-fi
-
-# Poids transformer BF16 (remplaces par le fichier FP8 externe)
-for f in "${QWEN_DIR}/transformer"/*.safetensors; do
-    [ -f "$f" ] && OBSOLETE_FILES+=("$f")
-done
-
-if [ ${#OBSOLETE_FILES[@]} -gt 0 ]; then
-    echo "============================================"
-    echo "  FICHIERS OBSOLETES A SUPPRIMER"
-    echo "============================================"
-    TOTAL_SIZE=0
-    for f in "${OBSOLETE_FILES[@]}"; do
-        if [ -f "$f" ]; then
-            SIZE=$(stat -c%s "$f" 2>/dev/null || echo 0)
-            TOTAL_SIZE=$((TOTAL_SIZE + SIZE))
-            echo "  [OBSOLETE] $f ($(numfmt --to=iec "$SIZE"))"
-        elif [ -d "$f" ]; then
-            echo "  [OBSOLETE] $f (dossier)"
-        fi
-    done
-    echo "  Total recuperable: $(numfmt --to=iec "$TOTAL_SIZE")"
-    echo "============================================"
-fi
+echo "[medusa] Audit du volume..."
+python /app/audit_volume.py --volume "$WORKSPACE" || true
 
 # -----------------------------------------------
 # 6. Demarrage
