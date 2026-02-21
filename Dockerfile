@@ -9,7 +9,7 @@
 # Serverless:  docker run --gpus all -e SERVERLESS=true -v /workspace:/workspace medusa-i2i
 
 # ============================================================
-# Stage 1 : builder (compile PyTorch, Diffusers, bitsandbytes)
+# Stage 1 : builder (compile PyTorch, Diffusers)
 # ============================================================
 FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu24.04 AS builder
 
@@ -43,7 +43,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install packaging setuptools wheel
 
-# --- Diffusers + bitsandbytes + runtime deps ---
+# --- Diffusers + runtime deps ---
 COPY requirements.txt /tmp/requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -r /tmp/requirements.txt

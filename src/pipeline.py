@@ -1,7 +1,7 @@
 """
 MedusaI2IPipeline — Diffusers-based image editing with Qwen-Image-Edit-2511.
 
-Pipeline NF4 quantize + Lightning LoRA 4 steps pour edition d'images
+Pipeline FP8 layerwise casting + Lightning LoRA 4 steps pour edition d'images
 immobilier/renovation sur RunPod Serverless (RTX 4090, 24GB VRAM).
 """
 
@@ -11,7 +11,7 @@ import logging
 import os
 
 import torch
-from diffusers import BitsAndBytesConfig, QwenImageEditPlusPipeline, QwenImageTransformer2DModel
+from diffusers import QwenImageEditPlusPipeline, QwenImageTransformer2DModel
 from PIL import Image
 
 log = logging.getLogger("medusa")
@@ -72,7 +72,7 @@ LIGHTNING_TRUE_CFG_SCALE = 1.0
 
 
 class MedusaI2IPipeline:
-    """Pipeline I2I utilisant Diffusers avec Qwen-Image-Edit-2511 NF4 + Lightning LoRA."""
+    """Pipeline I2I utilisant Diffusers avec Qwen-Image-Edit-2511 FP8 + Lightning LoRA."""
 
     def __init__(self, models_dir: str) -> None:
         self.models_dir = models_dir
@@ -92,20 +92,21 @@ class MedusaI2IPipeline:
             log.info("VRAM [%s]: %.2fGB alloc, %.2fGB reserved", label, alloc, rsvd)
 
     def load(self) -> None:
-        """Charge le pipeline NF4 + fuse Lightning LoRA."""
-        log.info("Chargement transformer NF4...")
-        nf4_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.bfloat16,
-        )
+        """Charge le pipeline FP8 layerwise casting + fuse Lightning LoRA.
+
+        Ordre critique :
+        1. Transformer BF16 (poids complets)
+        2. Pipeline complet (tout BF16 sur CPU)
+        3. Fuse Lightning LoRA (modifie poids BF16 in-place)
+        4. enable_layerwise_casting (storage FP8, compute BF16) — APRES fuse LoRA
+        5. enable_model_cpu_offload — pas de .to("cuda")
+        """
+        log.info("Chargement transformer BF16...")
         transformer = QwenImageTransformer2DModel.from_pretrained(
             self._model_path,
             subfolder="transformer",
-            quantization_config=nf4_config,
             torch_dtype=torch.bfloat16,
         )
-        self._log_vram("apres transformer NF4")
 
         log.info("Chargement pipeline complet...")
         self._pipe = QwenImageEditPlusPipeline.from_pretrained(
@@ -113,9 +114,8 @@ class MedusaI2IPipeline:
             transformer=transformer,
             torch_dtype=torch.bfloat16,
         )
-        self._pipe.to("cuda")
 
-        # Fuse Lightning LoRA pour inference 4-step
+        # Fuse Lightning LoRA AVANT layerwise_casting (poids encore en BF16)
         if os.path.isfile(self._lightning_path):
             log.info("Fusion Lightning LoRA: %s", os.path.basename(self._lightning_path))
             self._pipe.load_lora_weights(
@@ -128,6 +128,16 @@ class MedusaI2IPipeline:
             log.info("Lightning LoRA fusionnee (4 steps)")
         else:
             log.warning("Lightning LoRA non trouvee: %s", self._lightning_path)
+
+        # FP8 layerwise casting : stockage FP8 (~10GB), compute BF16
+        log.info("Activation FP8 layerwise casting...")
+        self._pipe.transformer.enable_layerwise_casting(
+            storage_dtype=torch.float8_e4m3fn,
+            compute_dtype=torch.bfloat16,
+        )
+
+        # CPU offload : text encoder (14GB) et transformer (10GB) jamais en VRAM en meme temps
+        self._pipe.enable_model_cpu_offload()
 
         self._log_vram("pipeline pret")
 
@@ -152,7 +162,7 @@ class MedusaI2IPipeline:
             raise RuntimeError("Pipeline non charge — appeler load() d'abord")
 
         img = Image.open(image_path).convert("RGB").resize((width, height))
-        generator = torch.Generator(device="cuda").manual_seed(seed)
+        generator = torch.Generator(device="cpu").manual_seed(seed)
 
         result = self._pipe(
             image=img,

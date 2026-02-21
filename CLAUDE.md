@@ -2,16 +2,18 @@
 
 ## Projet
 
-Pipeline Image-to-Image editing utilisant Qwen-Image-Edit-2511 avec NF4 quantization.
+Pipeline Image-to-Image editing utilisant Qwen-Image-Edit-2511 avec FP8 layerwise casting.
 Inference directe via Diffusers (sans ComfyUI).
 Use case : edition d'images immobilier/renovation — before/after, changement de style, virtual staging.
 
 ## Contexte Technique
 
 - **Runtime** : Diffusers (Python direct) sur RunPod Serverless (RTX 4090, 24GB VRAM)
-- **Modele principal** : Qwen-Image-Edit-2511 (NF4 quantize via bitsandbytes, ~17-18GB VRAM transformer)
+- **Modele principal** : Qwen-Image-Edit-2511 (FP8 layerwise casting via Diffusers, ~10GB VRAM transformer)
 - **Acceleration** : Lightning LoRA 4 steps fusionnee au cold start
 - **Approche** : Pipeline 1 passe, true_cfg_scale=1.0 (CFG desactive, modele distille)
+- **CPU offload** : `enable_model_cpu_offload()` — text encoder (14GB) et transformer (10GB) jamais en VRAM en meme temps
+- **VRAM peak** : ~14GB (vs ~17-18GB avec NF4)
 - **Output** : PNG/JPEG, resolution max 1024px, default 768px
 - **PyTorch** : ~2.7 (CUDA 12.8)
 
@@ -20,7 +22,7 @@ Use case : edition d'images immobilier/renovation — before/after, changement d
 - `Dockerfile` — image Docker multi-stage (devel -> runtime), sans ComfyUI
 - `docker-compose.yml` — lancement local GPU
 - `src/start.sh` — telecharge modeles + lance handler
-- `src/pipeline.py` — classe MedusaI2IPipeline (NF4 + Lightning LoRA)
+- `src/pipeline.py` — classe MedusaI2IPipeline (FP8 layerwise casting + Lightning LoRA)
 - `src/handler.py` — handler RunPod serverless (API simplifiee)
 - `scripts/test_local.py` — test hors RunPod
 
@@ -86,11 +88,14 @@ Avec prompt libre :
 
 ## Points d'Attention
 
-- Le transformer est charge en NF4 (bitsandbytes) pour tenir dans 24GB VRAM
+- Le transformer est charge en BF16 puis converti en FP8 via `enable_layerwise_casting(storage_dtype=float8_e4m3fn, compute_dtype=bfloat16)`
+- **Ordre critique** : fuse Lightning LoRA AVANT `enable_layerwise_casting` (poids doivent etre BF16 pour la fusion)
+- `enable_model_cpu_offload()` gere le placement GPU — NE PAS appeler `.to("cuda")`
+- `torch.Generator(device="cpu")` requis avec CPU offload (pas `"cuda"`)
 - Lightning LoRA est fusionnee definitivement au load (`fuse_lora` + `unload_lora_weights`)
 - `true_cfg_scale=1.0` desactive la guidance (modele distille, single forward pass)
 - Resolution max 1024px, default 768px, alignement 8px
 - Pas d'upscale des images sources plus petites que 768px
 - `transformers>=4.46` requis (pas de pin strict comme I2V)
 - Pas de warmup embeddings — Diffusers gere tout en interne
-- Pas de baked checkpoint — NF4 est charge directement
+- Repo BF16 complet (~57GB) necessaire sur disque — layerwise_casting charge BF16 puis stocke FP8 en memoire
