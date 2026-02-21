@@ -67,7 +67,8 @@ RUN pip install --no-cache-dir \
     sgl-kernel
 
 # --- Verification ABI ---
-RUN python -c "import torch; print(f'PyTorch {torch.__version__}'); assert torch.__version__.startswith('2.7'), f'ERREUR: torch={torch.__version__}, attendu 2.7.x'; import sageattention; print('SageAttention OK'); import sgl_kernel; print('sgl-kernel OK')"
+RUN python -c "import torch; print(f'PyTorch {torch.__version__}'); assert torch.__version__.startswith('2.7'), f'ERREUR: torch={torch.__version__}, attendu 2.7.x'; import sageattention; print('SageAttention OK')" && \
+    python -c "import importlib.util; assert importlib.util.find_spec('sgl_kernel'), 'sgl-kernel non installe'; print('sgl-kernel installe (check GPU au runtime)')"
 
 # ============================================================
 # Stage 2 : runtime (pas de compilateur, pas de headers)
