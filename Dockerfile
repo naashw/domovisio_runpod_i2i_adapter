@@ -60,12 +60,11 @@ RUN pip install --no-cache-dir \
     decord av pydantic \
     numpy tqdm tokenizers ftfy aiofiles psutil
 
-# --- Verification ABI ---
+# --- Verification ABI (pas de GPU au build → lightx2v verifie au runtime) ---
 RUN python -c "\
 import torch; print(f'PyTorch {torch.__version__}'); \
 assert torch.__version__.startswith('2.7'), f'ERREUR: torch={torch.__version__}, attendu 2.7.x'; \
-import triton; print(f'Triton {triton.__version__} OK'); \
-import lightx2v; print('LightX2V OK')"
+import triton; print(f'Triton {triton.__version__} OK')"
 
 # ============================================================
 # Stage 2 : runtime (pas de compilateur, pas de headers)
