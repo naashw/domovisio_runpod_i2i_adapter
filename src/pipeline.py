@@ -92,7 +92,7 @@ class MedusaI2IPipeline:
         """Charge le pipeline LightX2V avec le checkpoint FP8 pour num_steps.
 
         1. LightX2VPipeline avec model_cls qwen-image-edit-2511, task i2i
-        2. FP8 quantization via enable_quantize (fp8-torch)
+        2. FP8 quantization via enable_quantize (fp8-triton)
         3. CPU offload par blocs (text encoder + transformer jamais en VRAM ensemble)
         4. create_generator avec torch SDPA (pas de resize_mode adaptive)
         """
@@ -114,7 +114,7 @@ class MedusaI2IPipeline:
         pipe.enable_quantize(
             dit_quantized=True,
             dit_quantized_ckpt=fp8_path,
-            quant_scheme="fp8-torch",
+            quant_scheme="fp8-triton",
         )
 
         log.info("Activation CPU offload (block granularity)...")

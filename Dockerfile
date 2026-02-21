@@ -63,8 +63,7 @@ RUN pip install --no-cache-dir \
     einops loguru scipy gguf qtorch prometheus_client \
     imageio imageio-ffmpeg opencv-python \
     decord av pydantic \
-    numpy tqdm tokenizers ftfy aiofiles psutil \
-    torchao
+    numpy tqdm tokenizers ftfy aiofiles psutil
 
 # --- Verification ABI ---
 RUN python -c "import torch; print(f'PyTorch {torch.__version__}'); assert torch.__version__.startswith('2.7'), f'ERREUR: torch={torch.__version__}, attendu 2.7.x'; import sageattention; print('SageAttention OK')"
