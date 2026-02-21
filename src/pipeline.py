@@ -106,6 +106,12 @@ class MedusaI2IPipeline:
         with torch.device("meta"):
             transformer = QwenImageTransformer2DModel.from_config(config)
         state_dict = load_file(self._fp8_path, device="cpu")
+        # Filtrer les weight_scale (metadata quantization, pas attendu par le modele)
+        scale_keys = [k for k in state_dict if k.endswith(".weight_scale")]
+        for k in scale_keys:
+            del state_dict[k]
+        if scale_keys:
+            log.info("Filtre %d cles weight_scale du state_dict", len(scale_keys))
         transformer.load_state_dict(state_dict, assign=True, strict=True)
         log.info("Transformer FP8 charge (%s)", os.path.basename(self._fp8_path))
 
