@@ -87,7 +87,6 @@ class MedusaI2IPipeline:
         }
         self._pipe = None
         self._loaded_steps: int | None = None
-        self._last_dims: tuple[int, int] | None = None
 
     def load(self, num_steps: int = 4) -> None:
         """Charge le pipeline LightX2V avec le checkpoint FP8 pour num_steps.
@@ -95,7 +94,7 @@ class MedusaI2IPipeline:
         1. LightX2VPipeline avec model_cls qwen-image-edit-2511, task i2i
         2. FP8 quantization via enable_quantize (fp8-torch)
         3. CPU offload par blocs (text encoder + transformer jamais en VRAM ensemble)
-        4. create_generator() est differe dans _ensure_generator() (par requete)
+        4. create_generator avec torch SDPA (pas de resize_mode adaptive)
         """
         from lightx2v import LightX2VPipeline
 
@@ -125,29 +124,16 @@ class MedusaI2IPipeline:
             text_encoder_offload=True,
         )
 
-        self._pipe = pipe
-        self._loaded_steps = num_steps
-        self._last_dims = None
-        log.info("Pipeline LightX2V pret (%d-step, FP8, torch SDPA)", num_steps)
-
-    def _ensure_generator(self, height: int, width: int) -> None:
-        """Cree/recree le generateur si les dimensions changent."""
-        if self._last_dims == (height, width):
-            return
-
-        log.info(
-            "Configuration generateur (torch SDPA, %dx%d, %d steps)...",
-            width, height, self._loaded_steps,
-        )
-        self._pipe.create_generator(
+        log.info("Configuration generateur (torch SDPA, %d steps)...", num_steps)
+        pipe.create_generator(
             attn_mode="torch",
-            height=height,
-            width=width,
-            infer_steps=self._loaded_steps,
+            infer_steps=num_steps,
             guidance_scale=1.0,
         )
-        self._last_dims = (height, width)
-        log.info("Generateur configure: %dx%d", width, height)
+
+        self._pipe = pipe
+        self._loaded_steps = num_steps
+        log.info("Pipeline LightX2V pret (%d-step, FP8, torch SDPA)", num_steps)
 
     def ensure_steps(self, num_steps: int) -> None:
         """Recharge le pipeline si le nombre de steps change."""
@@ -176,7 +162,6 @@ class MedusaI2IPipeline:
             raise RuntimeError("Pipeline non charge — appeler load() d'abord")
 
         self.ensure_steps(num_steps)
-        self._ensure_generator(height, width)
 
         # Resize image source au format cible (LANCZOS pour qualite photo)
         img = Image.open(image_path).convert("RGB").resize(

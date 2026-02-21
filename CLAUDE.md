@@ -108,5 +108,5 @@ Avec prompt libre :
 - Resize images source avec LANCZOS (meilleure qualite downscale pour photos immobilieres)
 - Limite upload images : 20MB max (check Content-Length HEAD + taille reelle)
 - torch SDPA active via `attn_mode="torch"` dans `create_generator()` — SageAttention produit des NaN avec FP8 (Issue #221)
-- `create_generator()` appele par requete avec height/width explicites (pas de resize_mode adaptive)
+- `create_generator()` sans `resize_mode` — evite l'override par la lookup table adaptive de Qwen
 - Les configs LightX2V sont copiees depuis `/opt/lightx2v/configs/` dans le Dockerfile
