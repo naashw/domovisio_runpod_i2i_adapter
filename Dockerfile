@@ -81,6 +81,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         python3.12 python3.12-dev \
         curl aria2 \
         libgl1 libglib2.0-0 \
+        gcc \
         google-perftools tini && \
     ln -sf /usr/bin/python3.12 /usr/bin/python && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
