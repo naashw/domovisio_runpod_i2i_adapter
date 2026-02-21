@@ -53,7 +53,9 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install git+https://github.com/huggingface/diffusers
 
 # --- SageAttention 2.2.0 (compile depuis source, requis CUDA 12.8+) ---
+# TORCH_CUDA_ARCH_LIST requis car pas de GPU au build time (RTX 4090 = 8.9)
 RUN --mount=type=cache,target=/root/.cache/pip \
+    TORCH_CUDA_ARCH_LIST="8.9" \
     pip install git+https://github.com/thu-ml/SageAttention.git@v2.2.0 --no-build-isolation
 
 # --- LightX2V from source (extensions CUDA) ---
