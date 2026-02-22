@@ -205,21 +205,6 @@ class MedusaI2IPipeline:
             gc.collect()
             torch.cuda.empty_cache()
 
-    @staticmethod
-    def _is_nan_output(image_path: str) -> bool:
-        """Detecte une image corrompue (NaN/inf directs ou tout noir/blanc/uniforme)."""
-        try:
-            img = np.array(Image.open(image_path).convert("RGB"), dtype=np.float32)
-            if np.isnan(img).any() or np.isinf(img).any():
-                return True
-            mean = img.mean()
-            std = img.std()
-            if mean < 1.0 or mean > 254.0 or std < 2.0:
-                return True
-        except Exception:
-            return True
-        return False
-
     def ensure_steps(self, num_steps: int) -> None:
         """Recharge le pipeline si le checkpoint FP8 (4-step vs 8-step) change."""
         if self._loaded_steps != num_steps:
@@ -288,23 +273,7 @@ class MedusaI2IPipeline:
                 save_result_path=output_path,
             )
 
-            # Fallback Flash Attention 3 si SA2 produit des NaN
-            if self._is_nan_output(output_path):
-                log.warning("SA2 NaN detecte — fallback flash_attn3")
-                self._pipe.create_generator(
-                    attn_mode="flash_attn3",
-                    infer_steps=num_steps,
-                    guidance_scale=1.0,
-                    height=height,
-                    width=width,
-                )
-                self._pipe.generate(
-                    seed=seed,
-                    image_path=tmp_input.name,
-                    prompt=prompt,
-                    negative_prompt=negative_prompt,
-                    save_result_path=output_path,
-                )
+
         finally:
             if os.path.isfile(tmp_input.name):
                 os.unlink(tmp_input.name)

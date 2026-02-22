@@ -69,7 +69,7 @@ RUN git clone --depth 1 https://github.com/Dao-AILab/flash-attention /tmp/flash-
     FLASH_ATTENTION_DISABLE_BACKWARD=TRUE \
     FLASH_ATTENTION_DISABLE_PAGEDKV=TRUE \
     FLASH_ATTENTION_DISABLE_FP8=TRUE \
-    MAX_JOBS=8 python setup.py install
+    MAX_JOBS=8 uv pip install --no-deps --no-build-isolation .
 
 # --- vllm + diffusers ---
 RUN --mount=type=cache,target=/root/.cache/uv \
