@@ -82,6 +82,8 @@ class MedusaI2IPipeline:
         self._fp8_path = os.path.join(models_dir, FP8_FILENAME)
         self._pipe = None
         self._loaded = False
+        self._current_height: int | None = None
+        self._current_width: int | None = None
 
     def _enable_fp8(self, pipe: object) -> None:
         """Active la quantization FP8 via fp8-triton (Triton JIT, sans sgl-kernel)."""
@@ -152,6 +154,8 @@ class MedusaI2IPipeline:
                 height=768,
                 width=768,
             )
+            self._current_height = 768
+            self._current_width = 768
             self._pipe.generate(
                 seed=0,
                 image_path=tmp.name,
@@ -184,6 +188,17 @@ class MedusaI2IPipeline:
             return True
         return False
 
+    def _free_runner(self) -> None:
+        """Libere le runner GPU avant de recreer un generator."""
+        import torch
+
+        if self._pipe is not None and hasattr(self._pipe, "runner") and self._pipe.runner is not None:
+            log.info("Liberation runner GPU (VRAM cleanup)...")
+            del self._pipe.runner
+            self._pipe.runner = None
+            gc.collect()
+            torch.cuda.empty_cache()
+
     def ensure_loaded(self) -> None:
         """Charge le pipeline si pas encore fait."""
         if not self._loaded:
@@ -209,18 +224,24 @@ class MedusaI2IPipeline:
 
         self.ensure_loaded()
 
-        # Configurer le generateur avec la resolution cible de cette requete
-        log.info(
-            "Configuration generateur (sage_attn2, %d steps, %dx%d)...",
-            NUM_STEPS, width, height,
-        )
-        self._pipe.create_generator(
-            attn_mode="sage_attn2",
-            infer_steps=NUM_STEPS,
-            guidance_scale=1.0,
-            height=height,
-            width=width,
-        )
+        # Reutiliser le generator si meme resolution, sinon liberer et recreer
+        if self._current_height == height and self._current_width == width:
+            log.info("Reutilisation generator (%dx%d, skip create_generator)", width, height)
+        else:
+            log.info(
+                "Configuration generateur (sage_attn2, %d steps, %dx%d)...",
+                NUM_STEPS, width, height,
+            )
+            self._free_runner()
+            self._pipe.create_generator(
+                attn_mode="sage_attn2",
+                infer_steps=NUM_STEPS,
+                guidance_scale=1.0,
+                height=height,
+                width=width,
+            )
+            self._current_height = height
+            self._current_width = width
 
         # Resize image source au format cible (LANCZOS pour qualite photo)
         img = Image.open(image_path).convert("RGB").resize(
