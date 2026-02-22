@@ -57,6 +57,10 @@ COPY requirements.txt /tmp/requirements.txt
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install -r /tmp/requirements.txt
 
+# --- Flash Attention 2 (compile CUDA kernels, RTX 4090 / Ampere+) ---
+RUN --mount=type=cache,target=/root/.cache/uv \
+    MAX_JOBS=4 uv pip install flash-attn --no-build-isolation
+
 # --- Diffusers from git (branche main, requis pour Qwen-Image-Edit-2511) ---
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install git+https://github.com/huggingface/diffusers

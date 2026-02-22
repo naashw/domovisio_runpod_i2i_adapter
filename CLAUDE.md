@@ -4,7 +4,7 @@
 ## Projet
 
 Pipeline Image-to-Image editing utilisant Qwen-Image-Edit-2511 avec transformer FP8 pre-quantise (Lightning fuse).
-Inference via LightX2V + torch SDPA (sans ComfyUI).
+Inference via LightX2V + Flash Attention 2 (sans ComfyUI).
 Use case : edition d'images immobilier/renovation — before/after, changement de style, virtual staging.
 
 ## Contexte Technique
@@ -12,9 +12,9 @@ Use case : edition d'images immobilier/renovation — before/after, changement d
 - **Runtime** : LightX2V (Python direct) sur RunPod Serverless (RTX 4090, 24GB VRAM)
 - **Modele principal** : Qwen-Image-Edit-2511 (transformer FP8 pre-quantise avec Lightning fuse)
 - **Fichiers FP8** : `qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_{4,8}steps_v1.0.safetensors` (~20GB chaque) de `lightx2v/Qwen-Image-Edit-2511-Lightning`
-- **LightX2V** : Gere nativement FP8, CPU offload, torch SDPA
+- **LightX2V** : Gere nativement FP8, CPU offload, Flash Attention 2
 - **FP8 backend** : `fp8-triton` (Triton kernel, inclus avec torch, zero dep supplementaire)
-- **Attention** : torch SDPA (scaled dot-product attention)
+- **Attention** : Flash Attention 2 (`flash-attn`, compile dans le builder stage)
 - **Approche** : Pipeline 1 passe, guidance_scale=1.0 (CFG desactive, modele distille), 4 ou 8 steps configurable
 - **CPU offload** : `enable_offload(cpu_offload=True, offload_granularity="block")` — text encoder et transformer jamais en VRAM en meme temps
 - **VRAM peak** : ~14GB
@@ -23,10 +23,10 @@ Use case : edition d'images immobilier/renovation — before/after, changement d
 
 ## Structure
 
-- `Dockerfile` — image Docker multi-stage (devel -> runtime), compile LightX2V
+- `Dockerfile` — image Docker multi-stage (torch-base -> builder -> runtime)
 - `docker-compose.yml` — lancement local GPU
 - `src/start.sh` — telecharge modeles (2 checkpoints FP8) + lance handler
-- `src/pipeline.py` — classe MedusaI2IPipeline (LightX2V, FP8, torch SDPA)
+- `src/pipeline.py` — classe MedusaI2IPipeline (LightX2V, FP8, flash_attn2)
 - `src/handler.py` — handler RunPod serverless (API simplifiee)
 - `scripts/test_local.py` — test hors RunPod
 - `scripts/audit_volume.py` — audit fichiers volume
@@ -107,7 +107,7 @@ Avec prompt libre :
 - `transformers>=4.46` requis
 - Resize images source avec LANCZOS (meilleure qualite downscale pour photos immobilieres)
 - Limite upload images : 20MB max (check Content-Length HEAD + taille reelle)
-- torch SDPA active via `attn_mode="torch"` dans `create_generator()` — SageAttention non installe (NaN avec FP8, Issue #221)
+- Flash Attention 2 via `attn_mode="flash_attn2"` dans `create_generator()` — `torch` retire du registre ATTN_WEIGHT_REGISTER de LightX2V, SageAttention NaN avec FP8 (Issue #221)
 - `create_generator()` sans `resize_mode` — evite l'override par la lookup table adaptive de Qwen
 - Les configs LightX2V sont copiees depuis `/opt/lightx2v/configs/` dans le Dockerfile
 - `fp8-triton` utilise le kernel Triton inclus avec torch — zero dep supplementaire (vllm/SageAttention supprimes)

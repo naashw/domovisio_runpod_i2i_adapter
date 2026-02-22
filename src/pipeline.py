@@ -124,16 +124,16 @@ class MedusaI2IPipeline:
             text_encoder_offload=True,
         )
 
-        log.info("Configuration generateur (torch SDPA, %d steps)...", num_steps)
+        log.info("Configuration generateur (flash_attn2, %d steps)...", num_steps)
         pipe.create_generator(
-            attn_mode="torch",
+            attn_mode="flash_attn2",
             infer_steps=num_steps,
             guidance_scale=1.0,
         )
 
         self._pipe = pipe
         self._loaded_steps = num_steps
-        log.info("Pipeline LightX2V pret (%d-step, FP8, torch SDPA)", num_steps)
+        log.info("Pipeline LightX2V pret (%d-step, FP8, flash_attn2)", num_steps)
 
     def ensure_steps(self, num_steps: int) -> None:
         """Recharge le pipeline si le nombre de steps change."""
