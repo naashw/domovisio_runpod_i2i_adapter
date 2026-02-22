@@ -18,6 +18,11 @@ services:
       - ./data:/workspace
     environment:
       - WORKSPACE=/workspace
+      - S3_BUCKET=medusa-bucket
+      - S3_ENDPOINT_URL=https://s3.sbg.io.cloud.ovh.net
+      - S3_REGION=sbg
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
     logging:
       driver: json-file
       options:
