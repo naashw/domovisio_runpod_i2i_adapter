@@ -62,7 +62,7 @@ download_model() {
     filename=$(basename "$url")
     local filepath="${dest_dir}/${filename}"
 
-    if [ -f "$filepath" ]; then
+    if [ -f "$filepath" ] && [ ! -f "${filepath}.aria2" ]; then
         local size
         size=$(stat -c%s "$filepath" 2>/dev/null || echo 0)
         if [ "$size" -gt "$min_size" ]; then
@@ -73,10 +73,15 @@ download_model() {
         rm -f "$filepath"
     fi
 
-    echo "[medusa] Telechargement: $filename"
+    if [ -f "${filepath}.aria2" ]; then
+        echo "[medusa] Reprise du telechargement: $filename"
+    else
+        echo "[medusa] Telechargement: $filename"
+    fi
     aria2c -x 16 -s 16 -k 1M \
         -d "$dest_dir" -o "$filename" \
         "$url" \
+        --continue=true \
         --console-log-level=error \
         --summary-interval=0 \
         --check-certificate=true \
@@ -97,17 +102,6 @@ download_model() {
 # 4. Telechargement des modeles (sequentiel)
 # -----------------------------------------------
 echo "[medusa] Demarrage des telechargements..."
-
-# Nettoyage des fichiers aria2 residuels + safetensors corrompus
-STALE_COUNT=$(find "${MODELS_DIR}" -maxdepth 1 -name "*.aria2" 2>/dev/null | wc -l)
-if [ "$STALE_COUNT" -gt 0 ]; then
-    echo "[medusa] Nettoyage de ${STALE_COUNT} download(s) incomplet(s)..."
-    find "${MODELS_DIR}" -maxdepth 1 -name "*.aria2" | while read -r aria2_file; do
-        base_file="${aria2_file%.aria2}"
-        echo "[medusa]   Suppression: $(basename "$base_file") (incomplet)"
-        rm -f "$base_file" "$aria2_file" "${aria2_file}__temp"
-    done
-fi
 
 # --- Qwen-Image-Edit-2511 (sans poids transformer BF16, ~37GB) ---
 QWEN_DIR="${MODELS_DIR}/Qwen-Image-Edit-2511"
