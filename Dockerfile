@@ -57,6 +57,11 @@ COPY requirements.txt /tmp/requirements.txt
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install -r /tmp/requirements.txt
 
+# --- Flash Attention 2 from source (sm_90 Hopper) ---
+RUN git clone --depth 1 https://github.com/Dao-AILab/flash-attention /tmp/flash-attention && \
+    cd /tmp/flash-attention && \
+    TORCH_CUDA_ARCH_LIST="9.0" MAX_JOBS=8 uv pip install --no-build-isolation -v .
+
 # --- SageAttention 2 from source (sm_90 Hopper, attention primaire) ---
 RUN git clone --depth 1 https://github.com/thu-ml/SageAttention /tmp/sageattention && \
     cd /tmp/sageattention && \
@@ -81,7 +86,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 RUN python -c "\
 import torch; print(f'PyTorch {torch.__version__}'); \
 assert torch.__version__.startswith('2.10'), f'ERREUR: torch={torch.__version__}, attendu 2.10.x'; \
-import triton; print(f'Triton {triton.__version__} OK')"
+import triton; print(f'Triton {triton.__version__} OK'); \
+import flash_attn; print(f'Flash Attention {flash_attn.__version__} OK')"
 
 # ============================================================
 # Stage 3 : runtime (pas de compilateur, pas de headers)

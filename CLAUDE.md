@@ -14,10 +14,10 @@ Use case : edition d'images immobilier/renovation — before/after, changement d
 - **Fichiers FP8** : `qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_{4,8}steps_v1.0.safetensors` (~20GB chaque) de `lightx2v/Qwen-Image-Edit-2511-Lightning`
 - **LightX2V** : Gere nativement FP8, SageAttention 2
 - **FP8 backend** : `fp8-cutlass` (CUTLASS kernels natifs, sans dependance vLLM, optimise Hopper TensorCore)
-- **Attention** : SageAttention 2 (Hopper-optimise, detection NaN en log sans fallback)
+- **Attention** : SageAttention 2 (defaut, Hopper-optimise, detection NaN en log sans fallback) + Flash Attention 2 disponible
 - **Approche** : Pipeline 1 passe, guidance_scale=1.0 (CFG desactive, modele distille), 4 ou 8 steps configurable
 - **CPU offload** : desactive (H100 80GB VRAM, tout en GPU)
-- **torch.compile** : regional sur blocs DiT (inductor, max-autotune-no-cudagraphs), warmup au cold start
+- **torch.compile** : non utilise (LightX2V gere l'inference via kernels Triton internes, incompatible avec torch.compile regional)
 - **VRAM peak** : ~40GB (tout en GPU, pas d'offload)
 - **Output** : PNG/JPEG, resolution max 1024px, default 768px
 - **PyTorch** : 2.10.x (CUDA 12.8) — installe avec `--no-deps` pour eviter les conflits
@@ -108,14 +108,14 @@ Avec prompt libre :
 - `transformers>=4.46` requis
 - Resize images source avec LANCZOS (meilleure qualite downscale pour photos immobilieres)
 - Limite upload images : 20MB max (check Content-Length HEAD + taille reelle)
-- SageAttention 2 via `attn_mode="sage_attn2"` (Hopper-optimise) — detection NaN en log error (pas de fallback FA3)
-- SA2 + FP8 NaN fix merge dec 2025 (Issue #288) — FA3 retire du build car le fix resout le probleme sans CPU offload
+- SageAttention 2 via `attn_mode="sage_attn2"` (Hopper-optimise, defaut) — detection NaN en log error
+- Flash Attention 2 disponible via `attn_mode="flash_attn2"` (installe depuis source, sm_90)
+- SA2 + FP8 NaN fix merge dec 2025 (Issue #288)
 - `create_generator()` appele dans `generate()` (pas dans `load()`) pour passer `height`/`width` dynamiquement a chaque requete — sinon LightX2V utilise ses defauts (480x832) et le runner interne recalcule a ~1664x928, ce qui degrade la qualite
 - `create_generator()` sans `resize_mode` — evite l'override par la lookup table adaptive de Qwen
 - Les configs LightX2V sont copiees depuis `/opt/lightx2v/configs/` dans le Dockerfile
 - `fp8-cutlass` utilise les kernels CUTLASS natifs (Hopper TensorCore) — pas de dependance vLLM
 - Un `quant_scheme` invalide tombe silencieusement sur le backend Default (BF16) sans erreur — toujours verifier dans les logs que le bon backend est charge
-- torch.compile regional sur blocs DiT — `max-autotune-no-cudagraphs` (resolution variable par requete), `fullgraph=False`, encapsule dans try/except
-- Warmup torch.compile au cold start (~30-60s supplementaire) avec inference dummy 768x768
+- torch.compile supprime — LightX2V n'expose pas `pipe.transformer` (modele accessible via `pipe.runner.model` apres `create_generator()`) et utilise des kernels Triton internes incompatibles avec torch.compile regional
 - PyTorch 2.10.x (CUDA 12.8) — installe avec `--no-deps` pour eviter le downgrade
 - `TORCH_CUDA_ARCH_LIST="9.0"` pour cibler Hopper (sm_90)

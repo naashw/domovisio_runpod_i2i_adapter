@@ -3,7 +3,7 @@ MedusaI2IPipeline — LightX2V-based image editing with Qwen-Image-Edit-2511.
 
 Pipeline FP8 pre-quantise (Lightning fuse) + SageAttention 2 pour edition d'images
 immobilier/renovation sur RunPod Serverless (H100, 80GB VRAM).
-FP8 via CUTLASS kernels (fp8-cutlass), pas de CPU offload, torch.compile regional.
+FP8 via CUTLASS kernels (fp8-cutlass), pas de CPU offload.
 """
 
 from __future__ import annotations
@@ -89,9 +89,12 @@ class MedusaI2IPipeline:
         1. LightX2VPipeline avec model_cls qwen-image-edit-2511, task i2i
         2. FP8 quantization via enable_quantize (fp8-cutlass, CUTLASS kernels)
         3. Pas de CPU offload (H100 80GB VRAM — tout en GPU)
-        4. torch.compile regional sur blocs DiT (warmup au cold start)
 
         create_generator() est appele dans generate() pour passer height/width dynamiquement.
+
+        Note: torch.compile n'est pas utilise car LightX2V gere l'inference via des kernels
+        Triton internes (transformer_infer). Le pipeline n'expose pas d'attribut `transformer`
+        standard — le modele est accessible via pipe.runner.model apres create_generator().
         """
         from lightx2v import LightX2VPipeline
 
@@ -115,86 +118,9 @@ class MedusaI2IPipeline:
 
         # H100 80GB VRAM — pas de CPU offload, tout reste en GPU
 
-        # torch.compile regional sur les blocs DiT
-        self._apply_torch_compile(pipe)
-
         self._pipe = pipe
         self._loaded = True
         log.info("Pipeline LightX2V pret (%d-step, FP8 CUTLASS)", NUM_STEPS)
-
-        # Warmup torch.compile avec inference dummy
-        self._warmup()
-
-    @staticmethod
-    def _apply_torch_compile(pipe: object) -> None:
-        """Applique torch.compile regional sur les blocs DiT du transformer."""
-        import torch
-
-        try:
-            transformer = getattr(pipe, "transformer", None)
-            if transformer is None:
-                log.warning("torch.compile: transformer non trouve, skip")
-                return
-
-            compiled = 0
-            for name, module in transformer.named_children():
-                if "block" in name.lower() or "layer" in name.lower():
-                    try:
-                        compiled_module = torch.compile(
-                            module,
-                            backend="inductor",
-                            mode="max-autotune-no-cudagraphs",
-                            fullgraph=False,
-                        )
-                        setattr(transformer, name, compiled_module)
-                        compiled += 1
-                    except Exception as e:
-                        log.warning("torch.compile skip bloc %s: %s", name, e)
-
-            if compiled:
-                log.info("torch.compile: %d blocs DiT compiles", compiled)
-            else:
-                log.warning("torch.compile: aucun bloc DiT trouve")
-        except Exception as e:
-            log.warning("torch.compile non disponible, skip: %s", e)
-
-    def _warmup(self) -> None:
-        """Warmup torch.compile avec une inference dummy (768x768, image grise)."""
-        import torch
-
-        log.info("Warmup torch.compile (768x768, image grise)...")
-        try:
-            warmup_img = Image.new("RGB", (768, 768), color=(128, 128, 128))
-            tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-            warmup_img.save(tmp.name, format="PNG")
-            tmp.close()
-
-            warmup_out = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-            warmup_out.close()
-
-            self._pipe.create_generator(
-                attn_mode="sage_attn2",
-                infer_steps=NUM_STEPS,
-                guidance_scale=1.0,
-                height=768,
-                width=768,
-            )
-            self._pipe.generate(
-                seed=0,
-                image_path=tmp.name,
-                prompt="warmup",
-                negative_prompt="",
-                save_result_path=warmup_out.name,
-            )
-            log.info("Warmup termine")
-        except Exception as e:
-            log.warning("Warmup echoue (non bloquant): %s", e)
-        finally:
-            for f in [tmp.name, warmup_out.name]:
-                if os.path.isfile(f):
-                    os.unlink(f)
-            gc.collect()
-            torch.cuda.empty_cache()
 
     @staticmethod
     def _is_nan_output(image_path: str) -> bool:
