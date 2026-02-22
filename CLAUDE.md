@@ -14,7 +14,7 @@ Use case : edition d'images immobilier/renovation — before/after, changement d
 - **Fichiers FP8** : `qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_{4,8}steps_v1.0.safetensors` (~20GB chaque) de `lightx2v/Qwen-Image-Edit-2511-Lightning`
 - **LightX2V** : Gere nativement FP8, SageAttention 2
 - **FP8 backend** : `fp8-b128-deepgemm` (DeepGEMM, Hopper-optimise) avec fallback `fp8-triton`
-- **Attention** : SageAttention 2 (defaut, Hopper-optimise, detection NaN en log sans fallback) + Flash Attention 2 disponible
+- **Attention** : SageAttention 2 (defaut, Hopper-optimise, detection NaN en log sans fallback)
 - **Approche** : Pipeline 1 passe, guidance_scale=1.0 (CFG desactive, modele distille), 4 ou 8 steps configurable
 - **CPU offload** : desactive (H100 80GB VRAM, tout en GPU)
 - **torch.compile** : non utilise (LightX2V gere l'inference via kernels Triton internes, incompatible avec torch.compile regional)
@@ -110,7 +110,6 @@ Avec prompt libre :
 - Resize images source avec LANCZOS (meilleure qualite downscale pour photos immobilieres)
 - Limite upload images : 20MB max (check Content-Length HEAD + taille reelle)
 - SageAttention 2 via `attn_mode="sage_attn2"` (Hopper-optimise, defaut) — detection NaN en log error
-- Flash Attention 2 disponible via `attn_mode="flash_attn2"` (installe depuis source, sm_90)
 - SA2 + FP8 NaN fix merge dec 2025 (Issue #288)
 - `create_generator()` appele dans `generate()` (pas dans `load()`) pour passer `height`/`width` dynamiquement a chaque requete — sinon LightX2V utilise ses defauts (480x832) et le runner interne recalcule a ~1664x928, ce qui degrade la qualite
 - `create_generator()` sans `resize_mode` — evite l'override par la lookup table adaptive de Qwen
