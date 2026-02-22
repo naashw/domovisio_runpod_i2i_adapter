@@ -3,7 +3,7 @@ MedusaI2IPipeline — LightX2V-based image editing with Qwen-Image-Edit-2511.
 
 Pipeline FP8 pre-quantise (Lightning fuse) + SageAttention 2 pour edition d'images
 immobilier/renovation sur RunPod Serverless (H100, 80GB VRAM).
-FP8 via CUTLASS kernels (fp8-cutlass), pas de CPU offload.
+FP8 via DeepGEMM (fp8-b128-deepgemm), fallback fp8-triton. Pas de CPU offload.
 """
 
 from __future__ import annotations
@@ -83,11 +83,28 @@ class MedusaI2IPipeline:
         self._pipe = None
         self._loaded = False
 
+    def _enable_fp8(self, pipe: object) -> None:
+        """Active la quantization FP8 avec fallback: fp8-b128-deepgemm → fp8-triton."""
+        schemes = ["fp8-b128-deepgemm", "fp8-triton"]
+        for scheme in schemes:
+            try:
+                log.info("Activation quantization FP8 (%s): %s", scheme, FP8_FILENAME)
+                pipe.enable_quantize(
+                    dit_quantized=True,
+                    dit_quantized_ckpt=self._fp8_path,
+                    quant_scheme=scheme,
+                )
+                log.info("FP8 backend actif: %s", scheme)
+                return
+            except Exception as exc:
+                log.warning("FP8 %s echoue (%s), tentative suivante...", scheme, exc)
+        raise RuntimeError("Aucun backend FP8 disponible (essayes: %s)" % ", ".join(schemes))
+
     def load(self) -> None:
         """Charge le pipeline LightX2V avec le checkpoint FP8 8-step.
 
         1. LightX2VPipeline avec model_cls qwen-image-edit-2511, task i2i
-        2. FP8 quantization via enable_quantize (fp8-cutlass, CUTLASS kernels)
+        2. FP8 quantization via enable_quantize (fp8-b128-deepgemm, fallback fp8-triton)
         3. Pas de CPU offload (H100 80GB VRAM — tout en GPU)
 
         create_generator() est appele dans generate() pour passer height/width dynamiquement.
@@ -109,18 +126,13 @@ class MedusaI2IPipeline:
             task="i2i",
         )
 
-        log.info("Activation quantization FP8 (CUTLASS): %s", FP8_FILENAME)
-        pipe.enable_quantize(
-            dit_quantized=True,
-            dit_quantized_ckpt=self._fp8_path,
-            quant_scheme="fp8-cutlass",
-        )
+        self._enable_fp8(pipe)
 
         # H100 80GB VRAM — pas de CPU offload, tout reste en GPU
 
         self._pipe = pipe
         self._loaded = True
-        log.info("Pipeline LightX2V pret (%d-step, FP8 CUTLASS)", NUM_STEPS)
+        log.info("Pipeline LightX2V pret (%d-step, FP8)", NUM_STEPS)
 
         # Warmup : pre-compile les kernels Triton JIT + pre-alloue la memoire CUDA
         self._warmup()
