@@ -160,7 +160,9 @@ if [ "${SERVERLESS:-}" = "true" ] || [ -n "${RUNPOD_ENDPOINT_ID:-}" ]; then
     echo "[medusa] Output dir: $OUTPUT_DIR"
     echo "[medusa] Cache dir: $CACHE_DIR"
 
-    exec env PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python /app/handler.py
+    exec env PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+         TORCH_CUDA_ARCH_LIST="9.0" \
+         python /app/handler.py
 
 else
     # ===== MODE GPU POD =====

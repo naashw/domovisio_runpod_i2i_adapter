@@ -37,9 +37,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 ENV PATH="/opt/venv/bin:$PATH"
 
-# --- PyTorch 2.7.x (CUDA 12.8) — layer ~8 GB, change rarement ---
+# --- PyTorch 2.10.x (CUDA 12.8) — layer ~8 GB, change rarement ---
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install "torch<2.8" torchvision torchaudio \
+    uv pip install "torch>=2.10,<2.11" torchvision torchaudio \
         --index-url https://download.pytorch.org/whl/cu128
 
 # --- Core Python tooling ---
@@ -57,9 +57,19 @@ COPY requirements.txt /tmp/requirements.txt
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install -r /tmp/requirements.txt
 
-# --- Flash Attention 2 (compile CUDA kernels, RTX 4090 / Ampere+) ---
+# --- SageAttention 2 from source (sm_90 Hopper, attention primaire) ---
+RUN git clone --depth 1 https://github.com/thu-ml/SageAttention /tmp/sageattention && \
+    cd /tmp/sageattention && \
+    TORCH_CUDA_ARCH_LIST="9.0" MAX_JOBS=4 uv pip install --no-build-isolation -v .
+
+# --- Flash Attention 3 (Hopper, fallback si SA2 NaN) ---
+RUN git clone --depth 1 https://github.com/Dao-AILab/flash-attention /tmp/flash-attn && \
+    cd /tmp/flash-attn/hopper && \
+    TORCH_CUDA_ARCH_LIST="9.0" MAX_JOBS=4 python setup.py install
+
+# --- vllm (CUTLASS FP8 kernels pour fp8-vllm backend) ---
 RUN --mount=type=cache,target=/root/.cache/uv \
-    MAX_JOBS=4 uv pip install flash-attn --no-build-isolation
+    uv pip install vllm --no-deps
 
 # --- Diffusers from git (branche main, requis pour Qwen-Image-Edit-2511) ---
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -81,7 +91,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # --- Verification ABI (pas de GPU au build → lightx2v verifie au runtime) ---
 RUN python -c "\
 import torch; print(f'PyTorch {torch.__version__}'); \
-assert torch.__version__.startswith('2.7'), f'ERREUR: torch={torch.__version__}, attendu 2.7.x'; \
+assert torch.__version__.startswith('2.10'), f'ERREUR: torch={torch.__version__}, attendu 2.10.x'; \
 import triton; print(f'Triton {triton.__version__} OK')"
 
 # ============================================================
