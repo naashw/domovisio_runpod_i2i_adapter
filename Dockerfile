@@ -13,6 +13,8 @@
 # ============================================================
 FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu24.04 AS builder
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_PREFER_BINARY=1 \
     PYTHONUNBUFFERED=1 \
@@ -35,26 +37,26 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ENV PATH="/opt/venv/bin:$PATH"
 
 # --- PyTorch 2.7.x (CUDA 12.8) ---
-RUN pip install --no-cache-dir "torch<2.8" torchvision torchaudio \
+RUN uv pip install --no-cache "torch<2.8" torchvision torchaudio \
         --index-url https://download.pytorch.org/whl/cu128
 
 # --- Core Python tooling ---
-RUN pip install --no-cache-dir packaging setuptools wheel
+RUN uv pip install --no-cache packaging setuptools wheel
 
 # --- Runtime deps (requirements.txt) ---
 COPY requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
+RUN uv pip install --no-cache -r /tmp/requirements.txt
 
 # --- Diffusers from git (branche main, requis pour Qwen-Image-Edit-2511) ---
-RUN pip install --no-cache-dir git+https://github.com/huggingface/diffusers
+RUN uv pip install --no-cache git+https://github.com/huggingface/diffusers
 
 # --- LightX2V from source (--no-deps pour eviter torch<=2.8.0 downgrade) ---
 RUN git clone https://github.com/ModelTC/LightX2V /opt/lightx2v && \
     cd /opt/lightx2v && \
-    pip install --no-cache-dir --no-deps -v .
+    uv pip install --no-cache --no-deps -v .
 
 # --- Deps LightX2V manquantes (torch/diffusers/transformers deja installes) ---
-RUN pip install --no-cache-dir \
+RUN uv pip install --no-cache \
     einops loguru scipy gguf qtorch prometheus_client \
     imageio imageio-ffmpeg opencv-python \
     decord av pydantic \
