@@ -58,12 +58,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install -r /tmp/requirements.txt
 
 # --- SageAttention 2 from source (sm_90 Hopper, attention primaire) ---
-RUN git clone --depth 1 https://github.com/thu-ml/SageAttention /tmp/sageattention && \
+RUN --mount=type=cache,target=/tmp/ccache,sharing=locked \
+    git clone --depth 1 https://github.com/thu-ml/SageAttention /tmp/sageattention && \
     cd /tmp/sageattention && \
     TORCH_CUDA_ARCH_LIST="9.0" MAX_JOBS=8 uv pip install --no-build-isolation -v .
 
 # --- Flash Attention 3 (Hopper sm_90 only, inference only, fallback si SA2 NaN) ---
-RUN git clone --depth 1 https://github.com/Dao-AILab/flash-attention /tmp/flash-attn && \
+RUN --mount=type=cache,target=/tmp/ccache,sharing=locked \
+    git clone --depth 1 https://github.com/Dao-AILab/flash-attention /tmp/flash-attn && \
     cd /tmp/flash-attn/hopper && \
     FLASH_ATTENTION_DISABLE_SM80=TRUE \
     FLASH_ATTENTION_DISABLE_BACKWARD=TRUE \
@@ -71,20 +73,15 @@ RUN git clone --depth 1 https://github.com/Dao-AILab/flash-attention /tmp/flash-
     FLASH_ATTENTION_DISABLE_FP8=TRUE \
     MAX_JOBS=8 python setup.py install
 
-# --- vllm (CUTLASS FP8 kernels pour fp8-vllm backend) ---
+# --- vllm + diffusers + LightX2V + deps ---
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install vllm --no-deps
-
-# --- Diffusers from git (branche main, requis pour Qwen-Image-Edit-2511) ---
-RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install vllm --no-deps && \
     uv pip install git+https://github.com/huggingface/diffusers
 
-# --- LightX2V from source (--no-deps pour eviter torch<=2.8.0 downgrade) ---
 RUN git clone --depth 1 https://github.com/ModelTC/LightX2V /opt/lightx2v && \
     cd /opt/lightx2v && \
     uv pip install --no-deps -v .
 
-# --- Deps LightX2V manquantes (torch/diffusers/transformers deja installes) ---
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install \
     einops loguru scipy gguf prometheus_client \
