@@ -100,10 +100,9 @@ download_model() {
 }
 
 # -----------------------------------------------
-# 4. Telechargement des modeles (en parallele)
+# 4. Telechargement des modeles (sequentiel)
 # -----------------------------------------------
 echo "[medusa] Demarrage des telechargements..."
-DOWNLOAD_PIDS=()
 
 # --- Qwen-Image-Edit-2511 (sans poids transformer BF16, ~37GB) ---
 QWEN_DIR="${MODELS_DIR}/Qwen-Image-Edit-2511"
@@ -114,35 +113,18 @@ else
 from huggingface_hub import snapshot_download
 snapshot_download('Qwen/Qwen-Image-Edit-2511', local_dir='$QWEN_DIR',
     ignore_patterns=['*.gguf', '*.bin', 'flax_*', 'tf_*', 'transformer/*.safetensors'])
-" &
-    DOWNLOAD_PIDS+=($!)
+"
 fi
 
 # --- Transformer FP8 pre-quantise avec Lightning fuse (4-step, ~20GB) ---
 download_model \
     "https://huggingface.co/lightx2v/Qwen-Image-Edit-2511-Lightning/resolve/main/qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_4steps_v1.0.safetensors" \
-    "${MODELS_DIR}" 10000000000 &
-DOWNLOAD_PIDS+=($!)
+    "${MODELS_DIR}" 10000000000
 
 # --- Transformer FP8 pre-quantise avec Lightning fuse (8-step, ~20GB) ---
 download_model \
     "https://huggingface.co/lightx2v/Qwen-Image-Edit-2511-Lightning/resolve/main/qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_8steps_v1.0.safetensors" \
-    "${MODELS_DIR}" 10000000000 &
-DOWNLOAD_PIDS+=($!)
-
-# Attendre tous les telechargements et verifier les codes retour
-echo "[medusa] Attente fin des telechargements..."
-DOWNLOAD_FAILED=0
-for pid in "${DOWNLOAD_PIDS[@]}"; do
-    if ! wait "$pid"; then
-        DOWNLOAD_FAILED=1
-    fi
-done
-
-if [ "$DOWNLOAD_FAILED" -eq 1 ]; then
-    echo "[medusa] ERREUR: Un ou plusieurs telechargements ont echoue"
-    exit 1
-fi
+    "${MODELS_DIR}" 10000000000
 echo "[medusa] Tous les modeles sont prets."
 
 # -----------------------------------------------
