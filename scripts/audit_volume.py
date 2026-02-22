@@ -43,13 +43,13 @@ QWEN_EXPECTED_ROOT_FILES = {
 }
 
 FP8_FILENAMES = {
-    "qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_4steps_v1.0.safetensors",
     "qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_8steps_v1.0.safetensors",
 }
 
-# Anciens fichiers FP8 (renommes upstream)
+# Anciens fichiers FP8 (obsoletes)
 OBSOLETE_FP8_FILENAMES = {
     "qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning.safetensors",
+    "qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_4steps_v1.0.safetensors",
 }
 
 # Dossiers fonctionnels sur le volume

@@ -69,7 +69,8 @@ DEFAULT_NEGATIVE_PROMPT = (
     "compressed artifacts, jpeg artifacts, noise, grainy"
 )
 
-VALID_NUM_STEPS = (4, 8)
+NUM_STEPS = 8
+FP8_FILENAME = "qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_8steps_v1.0.safetensors"
 
 
 class MedusaI2IPipeline:
@@ -78,21 +79,12 @@ class MedusaI2IPipeline:
     def __init__(self, models_dir: str) -> None:
         self.models_dir = models_dir
         self._model_path = os.path.join(models_dir, "Qwen-Image-Edit-2511")
-        self._fp8_paths: dict[int, str] = {
-            4: os.path.join(
-                models_dir,
-                "qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_4steps_v1.0.safetensors",
-            ),
-            8: os.path.join(
-                models_dir,
-                "qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_8steps_v1.0.safetensors",
-            ),
-        }
+        self._fp8_path = os.path.join(models_dir, FP8_FILENAME)
         self._pipe = None
-        self._loaded_steps: int | None = None
+        self._loaded = False
 
-    def load(self, num_steps: int) -> None:
-        """Charge le pipeline LightX2V avec le checkpoint FP8 pour num_steps.
+    def load(self) -> None:
+        """Charge le pipeline LightX2V avec le checkpoint FP8 8-step.
 
         1. LightX2VPipeline avec model_cls qwen-image-edit-2511, task i2i
         2. FP8 quantization via enable_quantize (fp8-vllm, CUTLASS kernels)
@@ -103,11 +95,10 @@ class MedusaI2IPipeline:
         """
         from lightx2v import LightX2VPipeline
 
-        fp8_path = self._fp8_paths[num_steps]
-        if not os.path.isfile(fp8_path):
-            raise FileNotFoundError(f"Checkpoint FP8 introuvable: {fp8_path}")
+        if not os.path.isfile(self._fp8_path):
+            raise FileNotFoundError(f"Checkpoint FP8 introuvable: {self._fp8_path}")
 
-        log.info("Chargement LightX2V pipeline (%d-step)...", num_steps)
+        log.info("Chargement LightX2V pipeline (%d-step)...", NUM_STEPS)
 
         pipe = LightX2VPipeline(
             model_path=self._model_path,
@@ -115,10 +106,10 @@ class MedusaI2IPipeline:
             task="i2i",
         )
 
-        log.info("Activation quantization FP8 (CUTLASS): %s", os.path.basename(fp8_path))
+        log.info("Activation quantization FP8 (CUTLASS): %s", FP8_FILENAME)
         pipe.enable_quantize(
             dit_quantized=True,
-            dit_quantized_ckpt=fp8_path,
+            dit_quantized_ckpt=self._fp8_path,
             quant_scheme="fp8-vllm",
         )
 
@@ -128,8 +119,8 @@ class MedusaI2IPipeline:
         self._apply_torch_compile(pipe)
 
         self._pipe = pipe
-        self._loaded_steps = num_steps
-        log.info("Pipeline LightX2V pret (%d-step, FP8 CUTLASS)", num_steps)
+        self._loaded = True
+        log.info("Pipeline LightX2V pret (%d-step, FP8 CUTLASS)", NUM_STEPS)
 
         # Warmup torch.compile avec inference dummy
         self._warmup()
@@ -183,7 +174,7 @@ class MedusaI2IPipeline:
 
             self._pipe.create_generator(
                 attn_mode="sage_attn2",
-                infer_steps=self._loaded_steps,
+                infer_steps=NUM_STEPS,
                 guidance_scale=1.0,
                 height=768,
                 width=768,
@@ -220,18 +211,10 @@ class MedusaI2IPipeline:
             return True
         return False
 
-    def ensure_steps(self, num_steps: int) -> None:
-        """Recharge le pipeline si le checkpoint FP8 (4-step vs 8-step) change."""
-        if self._loaded_steps != num_steps:
-            log.info("Swap FP8: %s-step -> %d-step", self._loaded_steps or "none", num_steps)
-            # Liberer l'ancien pipeline avant de charger le nouveau
-            import torch
-
-            self._pipe = None
-            gc.collect()
-            torch.cuda.empty_cache()
-            log.info("Memoire liberee (gc + cuda.empty_cache)")
-            self.load(num_steps)
+    def ensure_loaded(self) -> None:
+        """Charge le pipeline si pas encore fait."""
+        if not self._loaded:
+            self.load()
 
     def generate(
         self,
@@ -241,7 +224,6 @@ class MedusaI2IPipeline:
         height: int,
         width: int,
         output_path: str,
-        num_steps: int = 4,
         negative_prompt: str = DEFAULT_NEGATIVE_PROMPT,
         output_format: str = "PNG",
     ) -> str:
@@ -252,16 +234,16 @@ class MedusaI2IPipeline:
         """
         import torch
 
-        self.ensure_steps(num_steps)
+        self.ensure_loaded()
 
         # Configurer le generateur avec la resolution cible de cette requete
         log.info(
             "Configuration generateur (sage_attn2, %d steps, %dx%d)...",
-            num_steps, width, height,
+            NUM_STEPS, width, height,
         )
         self._pipe.create_generator(
             attn_mode="sage_attn2",
-            infer_steps=num_steps,
+            infer_steps=NUM_STEPS,
             guidance_scale=1.0,
             height=height,
             width=width,
