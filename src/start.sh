@@ -63,19 +63,13 @@ download_model() {
     local filepath="${dest_dir}/${filename}"
 
     if [ -f "$filepath" ]; then
-        # Verifier si aria2c a laisse un fichier de progression (download incomplet)
-        if [ -f "${filepath}.aria2" ]; then
-            echo "[medusa] Download incomplet (fichier .aria2 present), reprise: $filename"
-            rm -f "${filepath}.aria2" "${filepath}.aria2__temp"
-        else
-            local size
-            size=$(stat -c%s "$filepath" 2>/dev/null || echo 0)
-            if [ "$size" -gt "$min_size" ]; then
-                echo "[medusa] Deja present: $filename ($(numfmt --to=iec "$size"))"
-                return 0
-            fi
-            echo "[medusa] Corrompu (${size}B < min ${min_size}B), re-telechargement: $filename"
+        local size
+        size=$(stat -c%s "$filepath" 2>/dev/null || echo 0)
+        if [ "$size" -gt "$min_size" ]; then
+            echo "[medusa] Deja present: $filename ($(numfmt --to=iec "$size"))"
+            return 0
         fi
+        echo "[medusa] Corrompu (${size}B < min ${min_size}B), re-telechargement: $filename"
         rm -f "$filepath"
     fi
 
@@ -103,6 +97,12 @@ download_model() {
 # 4. Telechargement des modeles (sequentiel)
 # -----------------------------------------------
 echo "[medusa] Demarrage des telechargements..."
+
+# Nettoyage des fichiers aria2 residuels (downloads interrompus)
+find "${MODELS_DIR}" -name "*.aria2" -o -name "*.aria2__temp" | while read -r f; do
+    echo "[medusa] Nettoyage aria2: $(basename "$f")"
+    rm -f "$f"
+done
 
 # --- Qwen-Image-Edit-2511 (sans poids transformer BF16, ~37GB) ---
 QWEN_DIR="${MODELS_DIR}/Qwen-Image-Edit-2511"
