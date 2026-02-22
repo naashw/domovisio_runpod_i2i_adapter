@@ -57,20 +57,14 @@ export VOLUME_ROOT="$WORKSPACE"
 download_model() {
     local url="$1"
     local dest_dir="$2"
-    local min_size="${3:-1000000}"
     local filename
     filename=$(basename "$url")
     local filepath="${dest_dir}/${filename}"
 
+    # aria2c supprime le .aria2 uniquement quand le download est complet
     if [ -f "$filepath" ] && [ ! -f "${filepath}.aria2" ]; then
-        local size
-        size=$(stat -c%s "$filepath" 2>/dev/null || echo 0)
-        if [ "$size" -gt "$min_size" ]; then
-            echo "[medusa] Deja present: $filename ($(numfmt --to=iec "$size"))"
-            return 0
-        fi
-        echo "[medusa] Corrompu (${size}B < min ${min_size}B), re-telechargement: $filename"
-        rm -f "$filepath"
+        echo "[medusa] Deja present: $filename ($(numfmt --to=iec "$(stat -c%s "$filepath")"))"
+        return 0
     fi
 
     if [ -f "${filepath}.aria2" ]; then
@@ -89,13 +83,6 @@ download_model() {
         --max-tries=3 \
         --retry-wait=5 \
         --timeout=600
-
-    local final_size
-    final_size=$(stat -c%s "$filepath" 2>/dev/null || echo 0)
-    if [ "$final_size" -lt "$min_size" ]; then
-        echo "[medusa] ERREUR: $filename trop petit (${final_size}B < min ${min_size}B)"
-        return 1
-    fi
 }
 
 # -----------------------------------------------
@@ -118,12 +105,12 @@ fi
 # --- Transformer FP8 pre-quantise avec Lightning fuse (4-step, ~20GB) ---
 download_model \
     "https://huggingface.co/lightx2v/Qwen-Image-Edit-2511-Lightning/resolve/main/qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_4steps_v1.0.safetensors" \
-    "${MODELS_DIR}" 10000000000
+    "${MODELS_DIR}"
 
 # --- Transformer FP8 pre-quantise avec Lightning fuse (8-step, ~20GB) ---
 download_model \
     "https://huggingface.co/lightx2v/Qwen-Image-Edit-2511-Lightning/resolve/main/qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_8steps_v1.0.safetensors" \
-    "${MODELS_DIR}" 10000000000
+    "${MODELS_DIR}"
 echo "[medusa] Tous les modeles sont prets."
 
 # -----------------------------------------------
