@@ -70,8 +70,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install git+https://github.com/huggingface/diffusers
 
 # --- DeepGEMM (FP8 backend, sm_90 Hopper) ---
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install deep-gemm
+# Clone avec --recursive pour inclure CUTLASS (sous-module requis)
+RUN git clone --depth 1 --recursive https://github.com/deepseek-ai/DeepGEMM.git /tmp/deep-gemm && \
+    cd /tmp/deep-gemm && \
+    uv pip install --no-build-isolation . && \
+    rm -rf /tmp/deep-gemm
 
 RUN git clone --depth 1 https://github.com/ModelTC/LightX2V /opt/lightx2v && \
     cd /opt/lightx2v && \
