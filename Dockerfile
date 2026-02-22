@@ -52,24 +52,31 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # ============================================================
 FROM torch-base AS builder
 
+# H100 only — force sm_90 pour TOUTES les compilations CUDA
+ENV TORCH_CUDA_ARCH_LIST="9.0"
+
 # --- Runtime deps (requirements.txt) ---
 COPY requirements.txt /tmp/requirements.txt
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install -r /tmp/requirements.txt
 
 # --- Flash Attention 2 from source (sm_90 Hopper) ---
-RUN git clone --depth 1 https://github.com/Dao-AILab/flash-attention /tmp/flash-attention && \
+RUN git clone --depth 1 --branch v2.7.4 https://github.com/Dao-AILab/flash-attention /tmp/flash-attention && \
     cd /tmp/flash-attention && \
-    TORCH_CUDA_ARCH_LIST="9.0" MAX_JOBS=8 uv pip install --no-build-isolation -v .
+    MAX_JOBS=2 uv pip install --no-build-isolation -v .
 
 # --- SageAttention 2 from source (sm_90 Hopper, attention primaire) ---
 RUN git clone --depth 1 https://github.com/thu-ml/SageAttention /tmp/sageattention && \
     cd /tmp/sageattention && \
-    TORCH_CUDA_ARCH_LIST="9.0" MAX_JOBS=8 uv pip install --no-build-isolation -v .
+    MAX_JOBS=2 uv pip install --no-build-isolation -v .
 
 # --- diffusers ---
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install git+https://github.com/huggingface/diffusers
+
+# --- DeepGEMM (FP8 backend, sm_90 Hopper) ---
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install deep-gemm
 
 RUN git clone --depth 1 https://github.com/ModelTC/LightX2V /opt/lightx2v && \
     cd /opt/lightx2v && \
@@ -107,7 +114,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get update && \
     apt-get install -y --no-install-recommends \
         python3.12 python3.12-dev \
-        curl aria2 \
+        curl \
         libgl1 libglib2.0-0 \
         gcc \
         google-perftools tini && \

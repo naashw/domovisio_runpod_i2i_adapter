@@ -52,70 +52,56 @@ export MODELS_DIR="$MODELS_DIR"
 export VOLUME_ROOT="$WORKSPACE"
 
 # -----------------------------------------------
-# 3. Fonction de telechargement
+# 3. Telechargement des modeles (hf_xet)
 # -----------------------------------------------
-download_model() {
-    local url="$1"
-    local dest_dir="$2"
-    local filename
-    filename=$(basename "$url")
-    local filepath="${dest_dir}/${filename}"
+echo "[medusa] Verification des modeles..."
 
-    # aria2c supprime le .aria2 uniquement quand le download est complet
-    if [ -f "$filepath" ] && [ ! -f "${filepath}.aria2" ]; then
-        echo "[medusa] Deja present: $filename ($(numfmt --to=iec "$(stat -c%s "$filepath")"))"
-        return 0
-    fi
+python - "$MODELS_DIR" <<'PYEOF'
+import os, sys
 
-    if [ -f "${filepath}.aria2" ]; then
-        echo "[medusa] Reprise du telechargement: $filename"
-    else
-        echo "[medusa] Telechargement: $filename"
-    fi
-    aria2c -x 16 -s 16 -k 1M \
-        -d "$dest_dir" -o "$filename" \
-        "$url" \
-        --continue=true \
-        --console-log-level=error \
-        --summary-interval=0 \
-        --check-certificate=true \
-        --file-allocation=none \
-        --max-tries=3 \
-        --retry-wait=5 \
-        --timeout=600
-}
-
-# -----------------------------------------------
-# 4. Telechargement des modeles (sequentiel)
-# -----------------------------------------------
-echo "[medusa] Demarrage des telechargements..."
+models_dir = sys.argv[1]
 
 # --- Qwen-Image-Edit-2511 (sans poids transformer BF16, ~37GB) ---
-QWEN_DIR="${MODELS_DIR}/Qwen-Image-Edit-2511"
-if [ -d "$QWEN_DIR" ] && [ -f "$QWEN_DIR/model_index.json" ]; then
-    echo "[medusa] Deja present: Qwen-Image-Edit-2511/"
-else
-    python -c "
-from huggingface_hub import snapshot_download
-snapshot_download('Qwen/Qwen-Image-Edit-2511', local_dir='$QWEN_DIR',
-    ignore_patterns=['*.gguf', '*.bin', 'flax_*', 'tf_*', 'transformer/*.safetensors'])
-"
-fi
+qwen_dir = os.path.join(models_dir, "Qwen-Image-Edit-2511")
+if os.path.isdir(qwen_dir) and os.path.isfile(os.path.join(qwen_dir, "model_index.json")):
+    print("[medusa] Deja present: Qwen-Image-Edit-2511/")
+else:
+    print("[medusa] Telechargement: Qwen-Image-Edit-2511/ ...")
+    from huggingface_hub import snapshot_download
+    snapshot_download(
+        "Qwen/Qwen-Image-Edit-2511",
+        local_dir=qwen_dir,
+        ignore_patterns=["*.gguf", "*.bin", "flax_*", "tf_*", "transformer/*.safetensors"],
+    )
+    print("[medusa] OK: Qwen-Image-Edit-2511/")
 
-# --- Transformer FP8 pre-quantise avec Lightning fuse (8-step, ~20GB) ---
-download_model \
-    "https://huggingface.co/lightx2v/Qwen-Image-Edit-2511-Lightning/resolve/main/qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_8steps_v1.0.safetensors" \
-    "${MODELS_DIR}"
+# --- Transformer FP8 Lightning fuse (8-step, ~20GB) ---
+fp8_name = "qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_8steps_v1.0.safetensors"
+fp8_path = os.path.join(models_dir, fp8_name)
+if os.path.isfile(fp8_path):
+    size_mb = os.path.getsize(fp8_path) / (1024 * 1024)
+    print(f"[medusa] Deja present: {fp8_name} ({size_mb:.0f} MB)")
+else:
+    print(f"[medusa] Telechargement: {fp8_name} ...")
+    from huggingface_hub import hf_hub_download
+    hf_hub_download(
+        repo_id="lightx2v/Qwen-Image-Edit-2511-Lightning",
+        filename=fp8_name,
+        local_dir=models_dir,
+    )
+    print(f"[medusa] OK: {fp8_name}")
+PYEOF
+
 echo "[medusa] Tous les modeles sont prets."
 
 # -----------------------------------------------
-# 5. Audit du volume (dry run — signale sans supprimer)
+# 4. Audit du volume (dry run — signale sans supprimer)
 # -----------------------------------------------
 echo "[medusa] Audit du volume..."
 python /app/audit_volume.py --volume "$WORKSPACE" || true
 
 # -----------------------------------------------
-# 6. Demarrage
+# 5. Demarrage
 # -----------------------------------------------
 if [ "${SERVERLESS:-}" = "true" ] || [ -n "${RUNPOD_ENDPOINT_ID:-}" ]; then
     # ===== MODE SERVERLESS =====

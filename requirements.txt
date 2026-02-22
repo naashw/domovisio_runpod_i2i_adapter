@@ -1,6 +1,6 @@
 runpod>=1.7.0,<2.0
 requests>=2.31,<3.0
-huggingface-hub>=0.20
+huggingface-hub[hf-xet]>=0.28
 Pillow>=10.0
 transformers>=4.46,<5.0
 accelerate>=1.0
