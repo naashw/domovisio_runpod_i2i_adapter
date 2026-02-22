@@ -12,9 +12,9 @@ Use case : edition d'images immobilier/renovation — before/after, changement d
 - **Runtime** : LightX2V (Python direct) sur RunPod Serverless (H100, 80GB VRAM)
 - **Modele principal** : Qwen-Image-Edit-2511 (transformer FP8 pre-quantise avec Lightning fuse)
 - **Fichiers FP8** : `qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_{4,8}steps_v1.0.safetensors` (~20GB chaque) de `lightx2v/Qwen-Image-Edit-2511-Lightning`
-- **LightX2V** : Gere nativement FP8, SageAttention 2, Flash Attention 3
+- **LightX2V** : Gere nativement FP8, SageAttention 2
 - **FP8 backend** : `fp8-vllm` (CUTLASS kernels, optimise Hopper TensorCore)
-- **Attention** : SageAttention 2 (Hopper-optimise, fallback Flash Attention 3 si NaN)
+- **Attention** : SageAttention 2 (Hopper-optimise, detection NaN en log sans fallback)
 - **Approche** : Pipeline 1 passe, guidance_scale=1.0 (CFG desactive, modele distille), 4 ou 8 steps configurable
 - **CPU offload** : desactive (H100 80GB VRAM, tout en GPU)
 - **torch.compile** : regional sur blocs DiT (inductor, max-autotune-no-cudagraphs), warmup au cold start
@@ -108,8 +108,8 @@ Avec prompt libre :
 - `transformers>=4.46` requis
 - Resize images source avec LANCZOS (meilleure qualite downscale pour photos immobilieres)
 - Limite upload images : 20MB max (check Content-Length HEAD + taille reelle)
-- SageAttention 2 via `attn_mode="sage_attn2"` (Hopper-optimise) — fallback `flash_attn3` si NaN detecte (image noire/blanche/uniforme)
-- SA2 + FP8 NaN fix merge dec 2025 (Issue #288) — Issue #199 (SA2 desactive) ne s'applique qu'avec CPU offload actif
+- SageAttention 2 via `attn_mode="sage_attn2"` (Hopper-optimise) — detection NaN en log error (pas de fallback FA3)
+- SA2 + FP8 NaN fix merge dec 2025 (Issue #288) — FA3 retire du build car le fix resout le probleme sans CPU offload
 - `create_generator()` appele dans `generate()` (pas dans `load()`) pour passer `height`/`width` dynamiquement a chaque requete — sinon LightX2V utilise ses defauts (480x832) et le runner interne recalcule a ~1664x928, ce qui degrade la qualite
 - `create_generator()` sans `resize_mode` — evite l'override par la lookup table adaptive de Qwen
 - Les configs LightX2V sont copiees depuis `/opt/lightx2v/configs/` dans le Dockerfile
