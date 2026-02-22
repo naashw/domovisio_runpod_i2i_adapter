@@ -99,10 +99,12 @@ download_model() {
 echo "[medusa] Demarrage des telechargements..."
 
 # Nettoyage des fichiers aria2 residuels (downloads interrompus)
-find "${MODELS_DIR}" -name "*.aria2" -o -name "*.aria2__temp" | while read -r f; do
-    echo "[medusa] Nettoyage aria2: $(basename "$f")"
-    rm -f "$f"
-done
+STALE_COUNT=$(find "${MODELS_DIR}" -name "*.aria2" -o -name "*.aria2__temp" 2>/dev/null | wc -l)
+if [ "$STALE_COUNT" -gt 0 ]; then
+    echo "[medusa] Nettoyage de ${STALE_COUNT} fichier(s) aria2 orphelin(s)..."
+    find "${MODELS_DIR}" -name "*.aria2" -delete
+    find "${MODELS_DIR}" -name "*.aria2__temp" -delete
+fi
 
 # --- Qwen-Image-Edit-2511 (sans poids transformer BF16, ~37GB) ---
 QWEN_DIR="${MODELS_DIR}/Qwen-Image-Edit-2511"
