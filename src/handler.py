@@ -159,6 +159,15 @@ def compute_target_resolution(
     return h, w
 
 
+def compute_file_hash(filepath: str) -> str:
+    """SHA256 hash du contenu d'un fichier."""
+    h = hashlib.sha256()
+    with open(filepath, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def compute_input_hash(job_input: dict) -> str:
     """Hash deterministe de l'input pour dedup."""
     raw = json.dumps(job_input, sort_keys=True, separators=(",", ":"))
@@ -184,7 +193,7 @@ def lookup_cache(input_hash: str) -> list[dict] | None:
         ext = os.path.splitext(filename)[1].lower()
         file_type = "image" if ext in IMAGE_EXTENSIONS else "file"
         size_mb = os.path.getsize(filepath) / (1024 * 1024)
-        s3_key = os.path.relpath(filepath, VOLUME_ROOT)
+        s3_key = f"generated/medias/{filename}"
         s3_url = upload_to_s3(filepath, s3_key)
         entry = {
             "filename": filename,
@@ -219,7 +228,7 @@ def collect_output(source_file: str, job_id: str) -> dict:
     ext = os.path.splitext(filename)[1].lower()
     file_type = "image" if ext in IMAGE_EXTENSIONS else "file"
     size_mb = os.path.getsize(dest_path) / (1024 * 1024)
-    s3_key = os.path.relpath(dest_path, VOLUME_ROOT)
+    s3_key = f"generated/medias/{filename}"
 
     log.info("%s: %.1f MB (%s) -> %s/", filename, size_mb, file_type, dest_dir)
 
@@ -299,8 +308,7 @@ def handler(job: dict) -> dict:
         # --- Generate ---
         output_dir = tempfile.mkdtemp(prefix="medusa_")
         ext = ".jpg" if output_format == "JPEG" else ".png"
-        output_filename = f"medusa_i2i_{job_id}{ext}"
-        output_path = os.path.join(output_dir, output_filename)
+        tmp_output_path = os.path.join(output_dir, f"tmp{ext}")
 
         start_time = time.time()
         pipeline.generate(
@@ -309,13 +317,19 @@ def handler(job: dict) -> dict:
             seed=seed,
             height=height,
             width=width,
-            output_path=output_path,
+            output_path=tmp_output_path,
             num_steps=num_steps,
             negative_prompt=negative_prompt,
             output_format=output_format,
         )
         elapsed = time.time() - start_time
         log.info("Generation terminee: %.1fs", elapsed)
+
+        # Renommer avec SHA256 du contenu
+        file_hash = compute_file_hash(tmp_output_path)
+        output_filename = f"{file_hash}{ext}"
+        output_path = os.path.join(output_dir, output_filename)
+        os.rename(tmp_output_path, output_path)
 
         # --- Collect output ---
         output_meta = collect_output(output_path, job_id)
