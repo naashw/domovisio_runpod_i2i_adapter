@@ -291,11 +291,14 @@ def handler(job: dict) -> dict:
 
 
 def init_pipeline() -> MedusaI2IPipeline:
-    """Initialise le pipeline au demarrage du worker."""
-    log.info("Initialisation MedusaI2IPipeline...")
+    """Initialise le pipeline au demarrage du worker (lazy load).
+
+    Le checkpoint FP8 est charge a la premiere requete via ensure_steps()
+    pour utiliser le num_steps demande sans swap inutile.
+    """
+    log.info("Initialisation MedusaI2IPipeline (lazy load)...")
     p = MedusaI2IPipeline(models_dir=MODELS_DIR)
-    p.load()
-    log.info("Pipeline pret.")
+    log.info("Pipeline initialise, chargement differe a la premiere requete.")
     return p
 
 

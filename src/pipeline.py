@@ -7,6 +7,7 @@ immobilier/renovation sur RunPod Serverless (RTX 4090, 24GB VRAM).
 
 from __future__ import annotations
 
+import gc
 import logging
 import os
 import tempfile
@@ -88,7 +89,7 @@ class MedusaI2IPipeline:
         self._pipe = None
         self._loaded_steps: int | None = None
 
-    def load(self, num_steps: int = 4) -> None:
+    def load(self, num_steps: int) -> None:
         """Charge le pipeline LightX2V avec le checkpoint FP8 pour num_steps.
 
         1. LightX2VPipeline avec model_cls qwen-image-edit-2511, task i2i
@@ -133,6 +134,13 @@ class MedusaI2IPipeline:
         """Recharge le pipeline si le checkpoint FP8 (4-step vs 8-step) change."""
         if self._loaded_steps != num_steps:
             log.info("Swap FP8: %d-step -> %d-step", self._loaded_steps, num_steps)
+            # Liberer l'ancien pipeline avant de charger le nouveau
+            import torch
+
+            self._pipe = None
+            gc.collect()
+            torch.cuda.empty_cache()
+            log.info("Memoire liberee (gc + cuda.empty_cache)")
             self.load(num_steps)
 
 
@@ -153,9 +161,6 @@ class MedusaI2IPipeline:
         Returns:
             Chemin du fichier de sortie.
         """
-        if self._pipe is None:
-            raise RuntimeError("Pipeline non charge — appeler load() d'abord")
-
         self.ensure_steps(num_steps)
 
         # Configurer le generateur avec la resolution cible de cette requete
