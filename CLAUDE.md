@@ -26,7 +26,7 @@ Use case : edition d'images immobilier/renovation — before/after, changement d
 - `Dockerfile` — image Docker multi-stage (torch-base -> builder -> runtime)
 - `docker-compose.yml` — lancement local GPU
 - `src/start.sh` — telecharge modeles (2 checkpoints FP8) + lance handler
-- `src/pipeline.py` — classe MedusaI2IPipeline (LightX2V, FP8, flash_attn2)
+- `src/pipeline.py` — classe MedusaI2IPipeline (LightX2V, FP8, flash_attn2, resolution dynamique par requete)
 - `src/handler.py` — handler RunPod serverless (API simplifiee)
 - `scripts/test_local.py` — test hors RunPod
 - `scripts/audit_volume.py` — audit fichiers volume
@@ -108,6 +108,7 @@ Avec prompt libre :
 - Resize images source avec LANCZOS (meilleure qualite downscale pour photos immobilieres)
 - Limite upload images : 20MB max (check Content-Length HEAD + taille reelle)
 - Flash Attention 2 via `attn_mode="flash_attn2"` dans `create_generator()` — `torch` retire du registre ATTN_WEIGHT_REGISTER de LightX2V, SageAttention NaN avec FP8 (Issue #221)
+- `create_generator()` appele dans `generate()` (pas dans `load()`) pour passer `height`/`width` dynamiquement a chaque requete — sinon LightX2V utilise ses defauts (480x832) et le runner interne recalcule a ~1664x928, ce qui degrade la qualite
 - `create_generator()` sans `resize_mode` — evite l'override par la lookup table adaptive de Qwen
 - Les configs LightX2V sont copiees depuis `/opt/lightx2v/configs/` dans le Dockerfile
 - `fp8-triton` utilise le kernel Triton inclus avec torch — zero dep supplementaire (vllm/SageAttention supprimes)

@@ -94,7 +94,8 @@ class MedusaI2IPipeline:
         1. LightX2VPipeline avec model_cls qwen-image-edit-2511, task i2i
         2. FP8 quantization via enable_quantize (fp8-triton)
         3. CPU offload par blocs (text encoder + transformer jamais en VRAM ensemble)
-        4. create_generator avec torch SDPA (pas de resize_mode adaptive)
+
+        create_generator() est appele dans generate() pour passer height/width dynamiquement.
         """
         from lightx2v import LightX2VPipeline
 
@@ -124,22 +125,16 @@ class MedusaI2IPipeline:
             text_encoder_offload=True,
         )
 
-        log.info("Configuration generateur (flash_attn2, %d steps)...", num_steps)
-        pipe.create_generator(
-            attn_mode="flash_attn2",
-            infer_steps=num_steps,
-            guidance_scale=1.0,
-        )
-
         self._pipe = pipe
         self._loaded_steps = num_steps
-        log.info("Pipeline LightX2V pret (%d-step, FP8, flash_attn2)", num_steps)
+        log.info("Pipeline LightX2V pret (%d-step, FP8)", num_steps)
 
     def ensure_steps(self, num_steps: int) -> None:
-        """Recharge le pipeline si le nombre de steps change."""
+        """Recharge le pipeline si le checkpoint FP8 (4-step vs 8-step) change."""
         if self._loaded_steps != num_steps:
             log.info("Swap FP8: %d-step -> %d-step", self._loaded_steps, num_steps)
             self.load(num_steps)
+
 
     def generate(
         self,
@@ -162,6 +157,19 @@ class MedusaI2IPipeline:
             raise RuntimeError("Pipeline non charge — appeler load() d'abord")
 
         self.ensure_steps(num_steps)
+
+        # Configurer le generateur avec la resolution cible de cette requete
+        log.info(
+            "Configuration generateur (flash_attn2, %d steps, %dx%d)...",
+            num_steps, width, height,
+        )
+        self._pipe.create_generator(
+            attn_mode="flash_attn2",
+            infer_steps=num_steps,
+            guidance_scale=1.0,
+            height=height,
+            width=width,
+        )
 
         # Resize image source au format cible (LANCZOS pour qualite photo)
         img = Image.open(image_path).convert("RGB").resize(
