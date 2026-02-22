@@ -13,7 +13,7 @@ Use case : edition d'images immobilier/renovation — before/after, changement d
 - **Modele principal** : Qwen-Image-Edit-2511 (transformer FP8 pre-quantise avec Lightning fuse)
 - **Fichiers FP8** : `qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_{4,8}steps_v1.0.safetensors` (~20GB chaque) de `lightx2v/Qwen-Image-Edit-2511-Lightning`
 - **LightX2V** : Gere nativement FP8, SageAttention 2
-- **FP8 backend** : `fp8-vllm` (CUTLASS kernels, optimise Hopper TensorCore)
+- **FP8 backend** : `fp8-cutlass` (CUTLASS kernels natifs, sans dependance vLLM, optimise Hopper TensorCore)
 - **Attention** : SageAttention 2 (Hopper-optimise, detection NaN en log sans fallback)
 - **Approche** : Pipeline 1 passe, guidance_scale=1.0 (CFG desactive, modele distille), 4 ou 8 steps configurable
 - **CPU offload** : desactive (H100 80GB VRAM, tout en GPU)
@@ -113,7 +113,7 @@ Avec prompt libre :
 - `create_generator()` appele dans `generate()` (pas dans `load()`) pour passer `height`/`width` dynamiquement a chaque requete — sinon LightX2V utilise ses defauts (480x832) et le runner interne recalcule a ~1664x928, ce qui degrade la qualite
 - `create_generator()` sans `resize_mode` — evite l'override par la lookup table adaptive de Qwen
 - Les configs LightX2V sont copiees depuis `/opt/lightx2v/configs/` dans le Dockerfile
-- `fp8-vllm` utilise les kernels CUTLASS (Hopper TensorCore) — vllm installe avec `--no-deps` pour eviter les conflits torch
+- `fp8-cutlass` utilise les kernels CUTLASS natifs (Hopper TensorCore) — pas de dependance vLLM
 - Un `quant_scheme` invalide tombe silencieusement sur le backend Default (BF16) sans erreur — toujours verifier dans les logs que le bon backend est charge
 - torch.compile regional sur blocs DiT — `max-autotune-no-cudagraphs` (resolution variable par requete), `fullgraph=False`, encapsule dans try/except
 - Warmup torch.compile au cold start (~30-60s supplementaire) avec inference dummy 768x768

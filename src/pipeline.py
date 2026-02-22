@@ -3,7 +3,7 @@ MedusaI2IPipeline — LightX2V-based image editing with Qwen-Image-Edit-2511.
 
 Pipeline FP8 pre-quantise (Lightning fuse) + SageAttention 2 pour edition d'images
 immobilier/renovation sur RunPod Serverless (H100, 80GB VRAM).
-FP8 via CUTLASS kernels (fp8-vllm), pas de CPU offload, torch.compile regional.
+FP8 via CUTLASS kernels (fp8-cutlass), pas de CPU offload, torch.compile regional.
 """
 
 from __future__ import annotations
@@ -87,7 +87,7 @@ class MedusaI2IPipeline:
         """Charge le pipeline LightX2V avec le checkpoint FP8 8-step.
 
         1. LightX2VPipeline avec model_cls qwen-image-edit-2511, task i2i
-        2. FP8 quantization via enable_quantize (fp8-vllm, CUTLASS kernels)
+        2. FP8 quantization via enable_quantize (fp8-cutlass, CUTLASS kernels)
         3. Pas de CPU offload (H100 80GB VRAM — tout en GPU)
         4. torch.compile regional sur blocs DiT (warmup au cold start)
 
@@ -110,7 +110,7 @@ class MedusaI2IPipeline:
         pipe.enable_quantize(
             dit_quantized=True,
             dit_quantized_ckpt=self._fp8_path,
-            quant_scheme="fp8-vllm",
+            quant_scheme="fp8-cutlass",
         )
 
         # H100 80GB VRAM — pas de CPU offload, tout reste en GPU

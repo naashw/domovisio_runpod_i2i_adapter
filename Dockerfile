@@ -62,9 +62,8 @@ RUN git clone --depth 1 https://github.com/thu-ml/SageAttention /tmp/sageattenti
     cd /tmp/sageattention && \
     TORCH_CUDA_ARCH_LIST="9.0" MAX_JOBS=8 uv pip install --no-build-isolation -v .
 
-# --- vllm + diffusers ---
+# --- diffusers ---
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install vllm --no-deps && \
     uv pip install git+https://github.com/huggingface/diffusers
 
 RUN git clone --depth 1 https://github.com/ModelTC/LightX2V /opt/lightx2v && \
