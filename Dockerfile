@@ -62,10 +62,14 @@ RUN git clone --depth 1 https://github.com/thu-ml/SageAttention /tmp/sageattenti
     cd /tmp/sageattention && \
     TORCH_CUDA_ARCH_LIST="9.0" MAX_JOBS=8 uv pip install --no-build-isolation -v .
 
-# --- Flash Attention 3 (Hopper only sm_90, fallback si SA2 NaN) ---
+# --- Flash Attention 3 (Hopper sm_90 only, inference only, fallback si SA2 NaN) ---
 RUN git clone --depth 1 https://github.com/Dao-AILab/flash-attention /tmp/flash-attn && \
     cd /tmp/flash-attn/hopper && \
-    TORCH_CUDA_ARCH_LIST="9.0" MAX_JOBS=8 python setup.py install
+    FLASH_ATTENTION_DISABLE_SM80=TRUE \
+    FLASH_ATTENTION_DISABLE_BACKWARD=TRUE \
+    FLASH_ATTENTION_DISABLE_PAGEDKV=TRUE \
+    FLASH_ATTENTION_DISABLE_FP8=TRUE \
+    MAX_JOBS=8 python setup.py install
 
 # --- vllm (CUTLASS FP8 kernels pour fp8-vllm backend) ---
 RUN --mount=type=cache,target=/root/.cache/uv \
