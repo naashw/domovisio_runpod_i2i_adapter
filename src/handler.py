@@ -67,7 +67,7 @@ def get_s3_client():
             region_name=S3_REGION,
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
-            config=Config(retries={"max_attempts": 2, "mode": "standard"}),
+            config=Config(retries={"max_attempts": 3, "mode": "standard"}),
         )
     return _s3_client
 

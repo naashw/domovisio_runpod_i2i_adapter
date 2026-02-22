@@ -207,9 +207,11 @@ class MedusaI2IPipeline:
 
     @staticmethod
     def _is_nan_output(image_path: str) -> bool:
-        """Detecte une image corrompue (NaN → tout noir/blanc/uniforme)."""
+        """Detecte une image corrompue (NaN/inf directs ou tout noir/blanc/uniforme)."""
         try:
             img = np.array(Image.open(image_path).convert("RGB"), dtype=np.float32)
+            if np.isnan(img).any() or np.isinf(img).any():
+                return True
             mean = img.mean()
             std = img.std()
             if mean < 1.0 or mean > 254.0 or std < 2.0:
@@ -248,6 +250,8 @@ class MedusaI2IPipeline:
         Returns:
             Chemin du fichier de sortie.
         """
+        import torch
+
         self.ensure_steps(num_steps)
 
         # Configurer le generateur avec la resolution cible de cette requete
@@ -304,6 +308,8 @@ class MedusaI2IPipeline:
         finally:
             if os.path.isfile(tmp_input.name):
                 os.unlink(tmp_input.name)
+            gc.collect()
+            torch.cuda.empty_cache()
 
         # Si output_format est JPEG et LightX2V a ecrit un PNG, convertir
         if output_format == "JPEG" and output_path.lower().endswith((".jpg", ".jpeg")):

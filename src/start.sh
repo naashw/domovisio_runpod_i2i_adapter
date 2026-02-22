@@ -160,8 +160,10 @@ if [ "${SERVERLESS:-}" = "true" ] || [ -n "${RUNPOD_ENDPOINT_ID:-}" ]; then
     echo "[medusa] Output dir: $OUTPUT_DIR"
     echo "[medusa] Cache dir: $CACHE_DIR"
 
-    exec env PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+    exec env PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True,max_split_size_mb:512 \
          TORCH_CUDA_ARCH_LIST="9.0" \
+         CUDA_MODULE_LOADING=LAZY \
+         TORCH_CUDNN_BENCHMARK=1 \
          python /app/handler.py
 
 else
