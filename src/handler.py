@@ -42,6 +42,7 @@ MODELS_DIR = os.environ.get("MODELS_DIR", "/runpod-volume/models")
 
 MAX_DIMENSION = 1024
 DEFAULT_RESOLUTION = 768
+CACHE_TTL_SECONDS = 3600  # 1h
 
 # --- S3 ---
 
@@ -175,9 +176,19 @@ def compute_input_hash(job_input: dict) -> str:
 
 
 def lookup_cache(input_hash: str) -> list[dict] | None:
-    """Cherche des outputs existants dans le cache volume pour ce hash."""
+    """Cherche des outputs existants dans le cache volume pour ce hash.
+
+    Retourne None si le cache est expire (> CACHE_TTL_SECONDS).
+    """
     cache_path = os.path.join(CACHE_DIR, "dedup", input_hash)
     if not os.path.isdir(cache_path):
+        return None
+
+    # Verifier age du cache
+    cache_age = time.time() - os.path.getmtime(cache_path)
+    if cache_age > CACHE_TTL_SECONDS:
+        shutil.rmtree(cache_path, ignore_errors=True)
+        log.info("Cache expire (%s, %.0fmin) — supprime", input_hash, cache_age / 60)
         return None
 
     files = [
@@ -206,6 +217,24 @@ def lookup_cache(input_hash: str) -> list[dict] | None:
             entry["s3_url"] = s3_url
         outputs.append(entry)
     return outputs
+
+
+def cleanup_expired_cache() -> None:
+    """Supprime les entrees de cache dedup expirees (> CACHE_TTL_SECONDS)."""
+    dedup_dir = os.path.join(CACHE_DIR, "dedup")
+    if not os.path.isdir(dedup_dir):
+        return
+    now = time.time()
+    removed = 0
+    for entry in os.listdir(dedup_dir):
+        entry_path = os.path.join(dedup_dir, entry)
+        if not os.path.isdir(entry_path):
+            continue
+        if now - os.path.getmtime(entry_path) > CACHE_TTL_SECONDS:
+            shutil.rmtree(entry_path, ignore_errors=True)
+            removed += 1
+    if removed:
+        log.info("Cache cleanup: %d entree(s) expiree(s) supprimee(s)", removed)
 
 
 def save_to_cache(input_hash: str, source_file: str) -> None:
@@ -256,6 +285,9 @@ def handler(job: dict) -> dict:
 
     job_id = job.get("id", f"unknown-{int(time.time())}")
     job_input = job.get("input", {})
+
+    # --- Cleanup cache expire ---
+    cleanup_expired_cache()
 
     # --- Dedup cache EN PREMIER (filesystem only, pas besoin du pipeline) ---
     input_hash = compute_input_hash(job_input)
