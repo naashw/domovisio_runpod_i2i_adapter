@@ -4,7 +4,7 @@
 ## Projet
 
 Pipeline Image-to-Image editing utilisant Qwen-Image-Edit-2511 avec transformer FP8 pre-quantise (Lightning fuse).
-Inference via LightX2V + SageAttention 2 + DeepGEMM FP8 (sans ComfyUI).
+Inference via LightX2V + SageAttention 2 + FP8 Triton (sans ComfyUI).
 Use case : edition d'images immobilier/renovation — before/after, changement de style, virtual staging.
 
 ## Contexte Technique
@@ -13,7 +13,7 @@ Use case : edition d'images immobilier/renovation — before/after, changement d
 - **Modele principal** : Qwen-Image-Edit-2511 (transformer FP8 pre-quantise avec Lightning fuse)
 - **Fichiers FP8** : `qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_{4,8}steps_v1.0.safetensors` (~20GB chaque) de `lightx2v/Qwen-Image-Edit-2511-Lightning`
 - **LightX2V** : Gere nativement FP8, SageAttention 2
-- **FP8 backend** : `fp8-b128-deepgemm` (DeepGEMM, Hopper-optimise) avec fallback `fp8-triton`
+- **FP8 backend** : `fp8-triton` (Triton JIT, per-channel, sans dependance externe)
 - **Attention** : SageAttention 2 (defaut, Hopper-optimise, detection NaN en log sans fallback)
 - **Approche** : Pipeline 1 passe, guidance_scale=1.0 (CFG desactive, modele distille), 4 ou 8 steps configurable
 - **CPU offload** : desactive (H100 80GB VRAM, tout en GPU)
@@ -28,7 +28,7 @@ Use case : edition d'images immobilier/renovation — before/after, changement d
 - `Dockerfile` — image Docker multi-stage (torch-base -> builder -> runtime)
 - `docker-compose.yml` — lancement local GPU
 - `src/start.sh` — telecharge modeles (2 checkpoints FP8) + lance handler
-- `src/pipeline.py` — classe MedusaI2IPipeline (LightX2V, FP8 DeepGEMM, sage_attn2, resolution dynamique par requete)
+- `src/pipeline.py` — classe MedusaI2IPipeline (LightX2V, FP8 Triton, sage_attn2, resolution dynamique par requete)
 - `src/handler.py` — handler RunPod serverless (API simplifiee)
 - `scripts/test_local.py` — test hors RunPod
 - `scripts/audit_volume.py` — audit fichiers volume
@@ -114,7 +114,7 @@ Avec prompt libre :
 - `create_generator()` appele dans `generate()` (pas dans `load()`) pour passer `height`/`width` dynamiquement a chaque requete — sinon LightX2V utilise ses defauts (480x832) et le runner interne recalcule a ~1664x928, ce qui degrade la qualite
 - `create_generator()` sans `resize_mode` — evite l'override par la lookup table adaptive de Qwen
 - Les configs LightX2V sont copiees depuis `/opt/lightx2v/configs/` dans le Dockerfile
-- `fp8-b128-deepgemm` est le backend FP8 principal (DeepGEMM, Hopper) — fallback automatique vers `fp8-triton` si DeepGEMM echoue
+- `fp8-triton` est le backend FP8 (Triton JIT, per-channel) — `fp8-b128-deepgemm` abandonne car il depend de `sgl-kernel` (archive, incompatible PyTorch 2.10)
 - LightX2V assert strict sur `quant_scheme` invalide — un scheme inexistant crashe avec `AssertionError` (plus de fallback silencieux BF16)
 - torch.compile supprime — LightX2V n'expose pas `pipe.transformer` (modele accessible via `pipe.runner.model` apres `create_generator()`) et utilise des kernels Triton internes incompatibles avec torch.compile regional
 - Warmup inference dummy 768x768 au cold start — pre-compile les kernels Triton JIT et pre-alloue la memoire CUDA (~10-15s, reduit la latence de la 1ere requete)

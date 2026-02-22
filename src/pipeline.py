@@ -3,7 +3,7 @@ MedusaI2IPipeline — LightX2V-based image editing with Qwen-Image-Edit-2511.
 
 Pipeline FP8 pre-quantise (Lightning fuse) + SageAttention 2 pour edition d'images
 immobilier/renovation sur RunPod Serverless (H100, 80GB VRAM).
-FP8 via DeepGEMM (fp8-b128-deepgemm), fallback fp8-triton. Pas de CPU offload.
+FP8 via fp8-triton (Triton JIT). Pas de CPU offload.
 """
 
 from __future__ import annotations
@@ -84,27 +84,21 @@ class MedusaI2IPipeline:
         self._loaded = False
 
     def _enable_fp8(self, pipe: object) -> None:
-        """Active la quantization FP8 avec fallback: fp8-b128-deepgemm → fp8-triton."""
-        schemes = ["fp8-b128-deepgemm", "fp8-triton"]
-        for scheme in schemes:
-            try:
-                log.info("Activation quantization FP8 (%s): %s", scheme, FP8_FILENAME)
-                pipe.enable_quantize(
-                    dit_quantized=True,
-                    dit_quantized_ckpt=self._fp8_path,
-                    quant_scheme=scheme,
-                )
-                log.info("FP8 backend actif: %s", scheme)
-                return
-            except Exception as exc:
-                log.warning("FP8 %s echoue (%s), tentative suivante...", scheme, exc)
-        raise RuntimeError("Aucun backend FP8 disponible (essayes: %s)" % ", ".join(schemes))
+        """Active la quantization FP8 via fp8-triton (Triton JIT, sans sgl-kernel)."""
+        scheme = "fp8-triton"
+        log.info("Activation quantization FP8 (%s): %s", scheme, FP8_FILENAME)
+        pipe.enable_quantize(
+            dit_quantized=True,
+            dit_quantized_ckpt=self._fp8_path,
+            quant_scheme=scheme,
+        )
+        log.info("FP8 backend actif: %s", scheme)
 
     def load(self) -> None:
         """Charge le pipeline LightX2V avec le checkpoint FP8 8-step.
 
         1. LightX2VPipeline avec model_cls qwen-image-edit-2511, task i2i
-        2. FP8 quantization via enable_quantize (fp8-b128-deepgemm, fallback fp8-triton)
+        2. FP8 quantization via enable_quantize (fp8-triton)
         3. Pas de CPU offload (H100 80GB VRAM — tout en GPU)
 
         create_generator() est appele dans generate() pour passer height/width dynamiquement.
