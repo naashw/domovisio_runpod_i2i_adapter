@@ -63,13 +63,20 @@ download_model() {
     local filepath="${dest_dir}/${filename}"
 
     if [ -f "$filepath" ]; then
-        local size
-        size=$(stat -c%s "$filepath" 2>/dev/null || echo 0)
-        if [ "$size" -gt "$min_size" ]; then
-            echo "[medusa] Deja present: $filename ($(numfmt --to=iec "$size"))"
-            return 0
+        # Verifier si aria2c a laisse un fichier de progression (download incomplet)
+        if [ -f "${filepath}.aria2" ]; then
+            echo "[medusa] Download incomplet (fichier .aria2 present), reprise: $filename"
+            rm -f "${filepath}.aria2" "${filepath}.aria2__temp"
+        else
+            local size
+            size=$(stat -c%s "$filepath" 2>/dev/null || echo 0)
+            if [ "$size" -gt "$min_size" ]; then
+                echo "[medusa] Deja present: $filename ($(numfmt --to=iec "$size"))"
+                return 0
+            fi
+            echo "[medusa] Corrompu (${size}B < min ${min_size}B), re-telechargement: $filename"
         fi
-        echo "[medusa] Corrompu (${size}B < min ${min_size}B), re-telechargement: $filename"
+        rm -f "$filepath"
     fi
 
     echo "[medusa] Telechargement: $filename"

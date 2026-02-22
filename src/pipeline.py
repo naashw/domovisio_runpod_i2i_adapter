@@ -223,7 +223,7 @@ class MedusaI2IPipeline:
     def ensure_steps(self, num_steps: int) -> None:
         """Recharge le pipeline si le checkpoint FP8 (4-step vs 8-step) change."""
         if self._loaded_steps != num_steps:
-            log.info("Swap FP8: %d-step -> %d-step", self._loaded_steps, num_steps)
+            log.info("Swap FP8: %s-step -> %d-step", self._loaded_steps or "none", num_steps)
             # Liberer l'ancien pipeline avant de charger le nouveau
             import torch
 
