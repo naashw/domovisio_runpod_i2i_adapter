@@ -2,16 +2,17 @@
 # Image legere : les modeles sont telecharges au runtime sur le network volume
 # Supporte 2 modes : GPU Pod (interactif) et RunPod Serverless (API)
 #
-# Multi-stage build : devel (compile LightX2V) -> runtime (execute)
+# Multi-stage build : torch-base (PyTorch) -> builder (deps + LightX2V) -> runtime
 # Build:  DOCKER_BUILDKIT=1 docker build --platform linux/amd64 -t medusa-i2i .
 #
 # GPU Pod:     docker run --gpus all -p 8888:8888 -v /workspace:/workspace medusa-i2i
 # Serverless:  docker run --gpus all -e SERVERLESS=true -v /workspace:/workspace medusa-i2i
 
 # ============================================================
-# Stage 1 : builder (compile LightX2V, PyTorch)
+# Stage 1 : torch-base (CUDA devel + Python 3.12 + PyTorch ~8 GB)
+# Change rarement — cache quasi permanent
 # ============================================================
-FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu24.04 AS builder
+FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu24.04 AS torch-base
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
@@ -36,27 +37,38 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 ENV PATH="/opt/venv/bin:$PATH"
 
-# --- PyTorch 2.7.x (CUDA 12.8) ---
-RUN uv pip install --no-cache "torch<2.8" torchvision torchaudio \
+# --- PyTorch 2.7.x (CUDA 12.8) — layer ~8 GB, change rarement ---
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install "torch<2.8" torchvision torchaudio \
         --index-url https://download.pytorch.org/whl/cu128
 
 # --- Core Python tooling ---
-RUN uv pip install --no-cache packaging setuptools wheel
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install packaging setuptools wheel
+
+# ============================================================
+# Stage 2 : builder (deps applicatives + LightX2V)
+# Invalide si requirements.txt ou LightX2V change
+# ============================================================
+FROM torch-base AS builder
 
 # --- Runtime deps (requirements.txt) ---
 COPY requirements.txt /tmp/requirements.txt
-RUN uv pip install --no-cache -r /tmp/requirements.txt
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install -r /tmp/requirements.txt
 
 # --- Diffusers from git (branche main, requis pour Qwen-Image-Edit-2511) ---
-RUN uv pip install --no-cache git+https://github.com/huggingface/diffusers
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install git+https://github.com/huggingface/diffusers
 
 # --- LightX2V from source (--no-deps pour eviter torch<=2.8.0 downgrade) ---
-RUN git clone https://github.com/ModelTC/LightX2V /opt/lightx2v && \
+RUN git clone --depth 1 https://github.com/ModelTC/LightX2V /opt/lightx2v && \
     cd /opt/lightx2v && \
-    uv pip install --no-cache --no-deps -v .
+    uv pip install --no-deps -v .
 
 # --- Deps LightX2V manquantes (torch/diffusers/transformers deja installes) ---
-RUN uv pip install --no-cache \
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install \
     einops loguru scipy gguf qtorch prometheus_client \
     imageio imageio-ffmpeg opencv-python \
     decord av pydantic \
@@ -69,7 +81,7 @@ assert torch.__version__.startswith('2.7'), f'ERREUR: torch={torch.__version__},
 import triton; print(f'Triton {triton.__version__} OK')"
 
 # ============================================================
-# Stage 2 : runtime (pas de compilateur, pas de headers)
+# Stage 3 : runtime (pas de compilateur, pas de headers)
 # ============================================================
 FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04
 
