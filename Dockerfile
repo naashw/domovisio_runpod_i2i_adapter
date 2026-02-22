@@ -73,7 +73,7 @@ RUN git clone --depth 1 https://github.com/ModelTC/LightX2V /opt/lightx2v && \
 # --- Deps LightX2V manquantes (torch/diffusers/transformers deja installes) ---
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install \
-    einops loguru scipy gguf qtorch prometheus_client \
+    einops loguru scipy gguf prometheus_client \
     imageio imageio-ffmpeg opencv-python \
     decord av pydantic \
     numpy tqdm tokenizers ftfy aiofiles psutil
