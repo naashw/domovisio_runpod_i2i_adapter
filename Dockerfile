@@ -58,14 +58,12 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install -r /tmp/requirements.txt
 
 # --- SageAttention 2 from source (sm_90 Hopper, attention primaire) ---
-RUN --mount=type=cache,target=/tmp/ccache,sharing=locked \
-    git clone --depth 1 https://github.com/thu-ml/SageAttention /tmp/sageattention && \
+RUN git clone --depth 1 https://github.com/thu-ml/SageAttention /tmp/sageattention && \
     cd /tmp/sageattention && \
     TORCH_CUDA_ARCH_LIST="9.0" MAX_JOBS=8 uv pip install --no-build-isolation -v .
 
 # --- Flash Attention 3 (Hopper sm_90 only, inference only, fallback si SA2 NaN) ---
-RUN --mount=type=cache,target=/tmp/ccache,sharing=locked \
-    git clone --depth 1 https://github.com/Dao-AILab/flash-attention /tmp/flash-attn && \
+RUN git clone --depth 1 https://github.com/Dao-AILab/flash-attention /tmp/flash-attn &&\
     cd /tmp/flash-attn/hopper && \
     FLASH_ATTENTION_DISABLE_SM80=TRUE \
     FLASH_ATTENTION_DISABLE_BACKWARD=TRUE \
