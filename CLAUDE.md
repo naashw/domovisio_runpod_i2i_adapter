@@ -29,7 +29,7 @@ Use case : edition d'images immobilier/renovation — before/after, changement d
 - `docker-compose.yml` — lancement local GPU
 - `src/start.sh` — telecharge modeles (2 checkpoints FP8) + lance handler
 - `src/pipeline.py` — classe MedusaI2IPipeline (LightX2V, FP8 Triton, sage_attn2, resolution dynamique par requete)
-- `src/handler.py` — handler RunPod serverless (API simplifiee)
+- `src/handler.py` — handler RunPod serverless (API simplifiee, upload S3 boto3)
 - `scripts/test_local.py` — test hors RunPod
 - `scripts/audit_volume.py` — audit fichiers volume
 
@@ -65,14 +65,17 @@ Avec prompt libre :
 ```json
 {
   "images": [{
-    "filename": "medusa_i2i_abc123.png",
+    "filename": "8ff931...966c68.png",
     "content_type": "image",
-    "size_mb": 1.2,
-    "volume_path": "/runpod-volume/output/abc123/medusa_i2i_abc123.png",
-    "s3_key": "output/abc123/medusa_i2i_abc123.png"
+    "size_mb": 1.7,
+    "volume_path": "/runpod-volume/output/job-id/8ff931...966c68.png",
+    "s3_key": "generated/medias/8ff931...966c68.png",
+    "s3_url": "https://s3.sbg.io.cloud.ovh.net/bucket/generated/medias/8ff931...966c68.png"
   }]
 }
 ```
+
+Note : `s3_url` present uniquement si `S3_BUCKET` est configure. Filename = SHA256 du contenu.
 
 ## Presets Disponibles
 
@@ -90,7 +93,7 @@ Avec prompt libre :
 ## Conventions
 
 - Prefixe output : `medusa_i2i`
-- Reponse API : `images[]` avec `s3_key` + `volume_path`
+- Reponse API : `images[]` avec `s3_key` + `volume_path` + `s3_url` (si S3 configure)
 - Input images : URL https OU base64 (max 20MB)
 - Output images : `/runpod-volume/output/{job_id}/`
 - Dedup cache par hash : `/runpod-volume/cache/dedup/{hash}/`
@@ -111,7 +114,8 @@ Avec prompt libre :
 - Limite upload images : 20MB max (check Content-Length HEAD + taille reelle)
 - SageAttention 2 via `attn_mode="sage_attn2"` (Hopper-optimise, defaut) — detection NaN en log error
 - SA2 + FP8 NaN fix merge dec 2025 (Issue #288)
-- `create_generator()` appele dans `generate()` (pas dans `load()`) pour passer `height`/`width` dynamiquement a chaque requete — sinon LightX2V utilise ses defauts (480x832) et le runner interne recalcule a ~1664x928, ce qui degrade la qualite
+- `create_generator()` appele dans `generate()` (pas dans `load()`) pour passer `height`/`width` dynamiquement — sinon LightX2V utilise ses defauts (480x832) et le runner interne recalcule a ~1664x928, ce qui degrade la qualite
+- `create_generator()` reutilise si meme resolution (skip reload ~7s) — si resolution change, `_free_runner()` libere le transformer GPU avant de recreer (evite OOM par accumulation VRAM)
 - `create_generator()` sans `resize_mode` — evite l'override par la lookup table adaptive de Qwen
 - Les configs LightX2V sont copiees depuis `/opt/lightx2v/configs/` dans le Dockerfile
 - `fp8-triton` est le backend FP8 (Triton JIT, per-channel) — `fp8-b128-deepgemm` abandonne car il depend de `sgl-kernel` (archive, incompatible PyTorch 2.10)
