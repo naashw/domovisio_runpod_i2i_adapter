@@ -18,6 +18,7 @@ Use case : edition d'images immobilier/renovation — before/after, changement d
 - **Approche** : Pipeline 1 passe, guidance_scale=1.0 (CFG desactive, modele distille), 4 ou 8 steps configurable
 - **CPU offload** : desactive (H100 80GB VRAM, tout en GPU)
 - **torch.compile** : non utilise (LightX2V gere l'inference via kernels Triton internes, incompatible avec torch.compile regional)
+- **Warmup** : inference dummy 768x768 au cold start pour pre-compiler les kernels Triton JIT et pre-allouer la memoire CUDA
 - **VRAM peak** : ~40GB (tout en GPU, pas d'offload)
 - **Output** : PNG/JPEG, resolution max 1024px, default 768px
 - **PyTorch** : 2.10.x (CUDA 12.8) — installe avec `--no-deps` pour eviter les conflits
@@ -117,5 +118,6 @@ Avec prompt libre :
 - `fp8-cutlass` utilise les kernels CUTLASS natifs (Hopper TensorCore) — pas de dependance vLLM
 - Un `quant_scheme` invalide tombe silencieusement sur le backend Default (BF16) sans erreur — toujours verifier dans les logs que le bon backend est charge
 - torch.compile supprime — LightX2V n'expose pas `pipe.transformer` (modele accessible via `pipe.runner.model` apres `create_generator()`) et utilise des kernels Triton internes incompatibles avec torch.compile regional
+- Warmup inference dummy 768x768 au cold start — pre-compile les kernels Triton JIT et pre-alloue la memoire CUDA (~10-15s, reduit la latence de la 1ere requete)
 - PyTorch 2.10.x (CUDA 12.8) — installe avec `--no-deps` pour eviter le downgrade
 - `TORCH_CUDA_ARCH_LIST="9.0"` pour cibler Hopper (sm_90)

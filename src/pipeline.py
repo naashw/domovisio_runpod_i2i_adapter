@@ -122,6 +122,47 @@ class MedusaI2IPipeline:
         self._loaded = True
         log.info("Pipeline LightX2V pret (%d-step, FP8 CUTLASS)", NUM_STEPS)
 
+        # Warmup : pre-compile les kernels Triton JIT + pre-alloue la memoire CUDA
+        self._warmup()
+
+    def _warmup(self) -> None:
+        """Warmup avec inference dummy (768x768) pour pre-compiler les kernels Triton."""
+        import torch
+
+        log.info("Warmup inference (768x768, pre-compilation kernels Triton)...")
+        try:
+            warmup_img = Image.new("RGB", (768, 768), color=(128, 128, 128))
+            tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+            warmup_img.save(tmp.name, format="PNG")
+            tmp.close()
+
+            warmup_out = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+            warmup_out.close()
+
+            self._pipe.create_generator(
+                attn_mode="sage_attn2",
+                infer_steps=NUM_STEPS,
+                guidance_scale=1.0,
+                height=768,
+                width=768,
+            )
+            self._pipe.generate(
+                seed=0,
+                image_path=tmp.name,
+                prompt="warmup",
+                negative_prompt="",
+                save_result_path=warmup_out.name,
+            )
+            log.info("Warmup termine")
+        except Exception as e:
+            log.warning("Warmup echoue (non bloquant): %s", e)
+        finally:
+            for f in [tmp.name, warmup_out.name]:
+                if os.path.isfile(f):
+                    os.unlink(f)
+            gc.collect()
+            torch.cuda.empty_cache()
+
     @staticmethod
     def _is_nan_output(image_path: str) -> bool:
         """Detecte une image corrompue (NaN/inf directs ou tout noir/blanc/uniforme)."""
