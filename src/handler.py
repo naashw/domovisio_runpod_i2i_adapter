@@ -102,19 +102,12 @@ def resolve_image(image_data: str) -> str:
     """URL ou base64 → chemin fichier temporaire."""
     if image_data.startswith(("http://", "https://")):
         log.info("Telechargement image: %s", image_data[:80])
-        head = requests.head(image_data, timeout=10, allow_redirects=True)
-        content_length = int(head.headers.get("Content-Length", 0))
-        if content_length > MAX_IMAGE_SIZE_MB * 1024 * 1024:
-            raise ValueError(
-                f"Image trop volumineuse: {content_length / (1024*1024):.0f}MB "
-                f"(max {MAX_IMAGE_SIZE_MB}MB)"
-            )
         resp = requests.get(image_data, timeout=30)
         resp.raise_for_status()
         data = resp.content
         if len(data) > MAX_IMAGE_SIZE_MB * 1024 * 1024:
             raise ValueError(
-                f"Image telechargee trop volumineuse: {len(data) / (1024*1024):.0f}MB "
+                f"Image trop volumineuse: {len(data) / (1024*1024):.0f}MB "
                 f"(max {MAX_IMAGE_SIZE_MB}MB)"
             )
         log.info("Image telechargee: %.0f KB", len(data) / 1024)
@@ -286,6 +279,8 @@ def handler(job: dict) -> dict:
     job_id = job.get("id", f"unknown-{int(time.time())}")
     job_input = job.get("input", {})
 
+    log.info("Job %s — input: %s", job_id, json.dumps(job_input, default=str))
+
     # --- Cleanup cache expire ---
     cleanup_expired_cache()
 
@@ -317,10 +312,9 @@ def handler(job: dict) -> dict:
     if output_format not in ("PNG", "JPEG"):
         output_format = "PNG"
 
-    # --- Lazy init pipeline (seulement si cache miss) ---
+    # --- Pipeline deja init au startup (eager init) ---
     if pipeline is None:
-        log.info("Pipeline non init — cold start...")
-        pipeline = init_pipeline()
+        raise RuntimeError("Pipeline non initialise — le worker doit etre lance via __main__")
 
     disk_before = get_disk_usage_mb()
     log.info("Job %s - Disque avant: %.0f MB", job_id, disk_before)
@@ -388,16 +382,15 @@ def handler(job: dict) -> dict:
 
 
 def init_pipeline() -> MedusaI2IPipeline:
-    """Initialise le pipeline au demarrage du worker (lazy load).
-
-    Le checkpoint FP8 est charge a la premiere requete via ensure_steps()
-    chargement differe a la premiere requete.
-    """
-    log.info("Initialisation MedusaI2IPipeline (lazy load)...")
+    """Initialise le pipeline au demarrage du worker (eager load + warmup)."""
+    log.info("Initialisation MedusaI2IPipeline...")
     p = MedusaI2IPipeline(models_dir=MODELS_DIR)
-    log.info("Pipeline initialise, chargement differe a la premiere requete.")
+    p.load()
+    log.info("Pipeline pret.")
     return p
 
 
 if __name__ == "__main__":
+    # Eager init — le pipeline est pret avant le premier job
+    pipeline = init_pipeline()
     runpod.serverless.start({"handler": handler})

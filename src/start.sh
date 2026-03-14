@@ -95,13 +95,7 @@ PYEOF
 echo "[medusa] Tous les modeles sont prets."
 
 # -----------------------------------------------
-# 4. Audit du volume (dry run — signale sans supprimer)
-# -----------------------------------------------
-echo "[medusa] Audit du volume..."
-python /app/audit_volume.py --volume "$WORKSPACE" || true
-
-# -----------------------------------------------
-# 5. Demarrage
+# 4. Demarrage
 # -----------------------------------------------
 if [ "${SERVERLESS:-}" = "true" ] || [ -n "${RUNPOD_ENDPOINT_ID:-}" ]; then
     # ===== MODE SERVERLESS =====
@@ -110,11 +104,14 @@ if [ "${SERVERLESS:-}" = "true" ] || [ -n "${RUNPOD_ENDPOINT_ID:-}" ]; then
     # Dossiers persistants sur le network volume
     OUTPUT_DIR="${WORKSPACE}/output"
     CACHE_DIR="${WORKSPACE}/cache"
-    mkdir -p "$OUTPUT_DIR" "$CACHE_DIR"
+    TRITON_CACHE="${WORKSPACE}/cache/triton"
+    mkdir -p "$OUTPUT_DIR" "$CACHE_DIR" "$TRITON_CACHE"
     export OUTPUT_VOLUME_DIR="$OUTPUT_DIR"
     export CACHE_DIR="$CACHE_DIR"
+    export TRITON_CACHE_DIR="$TRITON_CACHE"
     echo "[medusa] Output dir: $OUTPUT_DIR"
     echo "[medusa] Cache dir: $CACHE_DIR"
+    echo "[medusa] Triton cache: $TRITON_CACHE"
 
     exec env PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True,max_split_size_mb:512 \
          TORCH_CUDA_ARCH_LIST="9.0" \
