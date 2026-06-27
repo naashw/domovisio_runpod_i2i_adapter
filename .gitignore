@@ -1,1 +1,14 @@
+.DS_Store
+.idea/
+.vscode/
+*.swp
+.claude/
+*.log
+*.tmp
+.env
+.env.*
+!.env.example
 __pycache__/
+*.pyc
+data/
+.aws/
